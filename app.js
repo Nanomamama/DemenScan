@@ -65,6 +65,8 @@ const screenQuestion = document.getElementById('screen-question');
 const screenResult = document.getElementById('screen-result');
 const progressWrap = document.getElementById('progress-wrap');
 const sectionTabs = document.getElementById('section-tabs');
+const questionCard = screenQuestion.querySelector('.question-card');
+let lastRenderedQuestionKey = '';
 
 document.getElementById('btn-start').addEventListener('click', () => {
   state.screen = 'question';
@@ -86,12 +88,22 @@ document.getElementById('btn-restart').addEventListener('click', () => {
 
 document.getElementById('font-larger').addEventListener('click', () => cycleFontSize(1));
 document.getElementById('font-smaller').addEventListener('click', () => cycleFontSize(-1));
+const fontSmallerBtn = document.getElementById('font-smaller');
+const fontLargerBtn = document.getElementById('font-larger');
 const FONT_CLASSES = ['', 'font-large', 'font-xlarge'];
 let fontStep = 0;
 function cycleFontSize(dir) {
   fontStep = Math.min(2, Math.max(0, fontStep + dir));
-  document.body.classList.remove('font-large', 'font-xlarge');
-  if (FONT_CLASSES[fontStep]) document.body.classList.add(FONT_CLASSES[fontStep]);
+  document.documentElement.classList.remove('font-large', 'font-xlarge');
+  if (FONT_CLASSES[fontStep]) document.documentElement.classList.add(FONT_CLASSES[fontStep]);
+  updateFontSizeControls();
+}
+
+function updateFontSizeControls() {
+  fontSmallerBtn.disabled = fontStep === 0;
+  fontLargerBtn.disabled = fontStep === FONT_CLASSES.length - 1;
+  fontSmallerBtn.setAttribute('aria-disabled', String(fontSmallerBtn.disabled));
+  fontLargerBtn.setAttribute('aria-disabled', String(fontLargerBtn.disabled));
 }
 
 /* ---------------------------------------------------------
@@ -204,6 +216,8 @@ function render() {
 function renderQuestion() {
   const section = currentSection();
   const q = currentQuestion();
+  const questionKey = `${section.id}-${q.id}-${state.questionIdx}`;
+  const isSameQuestion = questionKey === lastRenderedQuestionKey;
 
   document.getElementById('progress-section-name').textContent = `ส่วนที่ ${section.id}: ${section.title}`;
   document.getElementById('progress-fraction').textContent = `${state.sectionIdx + 1} / ${SECTIONS.length}`;
@@ -215,8 +229,10 @@ function renderQuestion() {
   else { hintEl.hidden = true; }
 
   const area = document.getElementById('q-answer-area');
+  area.classList.toggle('answers-static', isSameQuestion);
   area.innerHTML = '';
   area.appendChild(buildAnswerControl(q));
+  animateQuestionCard(questionKey);
 
   document.getElementById('btn-prev').disabled = false;
   const isLastQuestion = state.sectionIdx === SECTIONS.length - 1 &&
@@ -229,6 +245,19 @@ function renderQuestion() {
 
   document.getElementById('skip-warning').hidden = isAnswered(q);
   renderSectionTabs();
+}
+
+function animateQuestionCard(questionKey) {
+  if (!questionCard || questionKey === lastRenderedQuestionKey) return;
+  lastRenderedQuestionKey = questionKey;
+  questionCard.classList.remove('question-card-enter');
+  void questionCard.offsetWidth;
+  questionCard.classList.add('question-card-enter');
+}
+
+function addStagger(el, index) {
+  el.style.setProperty('--stagger-index', index);
+  return el;
 }
 
 function renderSectionTabs() {
@@ -274,12 +303,14 @@ function renderSectionTabs() {
 
 function buildAnswerControl(q) {
   const wrap = document.createElement('div');
+  wrap.className = `answer-control answer-${q.type}`;
 
   const makeChoiceButtons = (options, pointsMap) => {
     options.forEach((label, i) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'choice-btn';
+      addStagger(btn, i);
       if (state.answers[q.id] === label) btn.classList.add('selected');
       btn.innerHTML = `<span class="dot"></span><span>${label}</span>`;
       btn.addEventListener('click', () => {
@@ -300,6 +331,7 @@ function buildAnswerControl(q) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'choice-btn multi-choice-btn';
+      addStagger(btn, grid.children.length);
       if (selected.includes(label)) btn.classList.add('selected');
       btn.innerHTML = `<span class="dot"></span><span>${label}</span>`;
       btn.addEventListener('click', () => {
@@ -324,6 +356,7 @@ function buildAnswerControl(q) {
       const input = document.createElement('input');
       input.type = 'text';
       input.className = 'text-input';
+      addStagger(input, index);
       input.placeholder = `คำที่ ${index + 1}`;
       input.value = values[index] ?? '';
       input.addEventListener('input', () => {
@@ -364,6 +397,7 @@ function buildAnswerControl(q) {
       const input = document.createElement('input');
       input.type = 'number';
       input.className = 'number-input';
+      addStagger(input, 0);
       input.value = state.answers[q.id] ?? '';
       input.addEventListener('input', () => { state.answers[q.id] = input.value; });
       wrap.appendChild(input);
@@ -373,6 +407,7 @@ function buildAnswerControl(q) {
       const input = document.createElement('input');
       input.type = 'time';
       input.className = 'text-input';
+      addStagger(input, 0);
       input.value = state.answers[q.id] ?? '';
       input.addEventListener('input', () => { state.answers[q.id] = input.value; });
       wrap.appendChild(input);
@@ -384,6 +419,7 @@ function buildAnswerControl(q) {
       const input = document.createElement('input');
       input.type = 'text';
       input.className = 'text-input';
+      addStagger(input, 0);
       input.value = state.answers[q.id] ?? '';
       input.addEventListener('input', () => { state.answers[q.id] = input.value; });
       wrap.appendChild(input);
@@ -407,6 +443,7 @@ function buildAnswerControl(q) {
         const box = document.createElement('button');
         box.type = 'button';
         box.className = 'image-choice-box';
+        addStagger(box, i);
         if (state.answers[q.id] === i) box.classList.add('selected');
         box.setAttribute('aria-label', `ตัวเลือกภาพที่ ${i + 1}`);
         box.innerHTML = `<span class="image-emoji">${icon.emoji}</span>`;
@@ -455,6 +492,7 @@ function buildAnswerControl(q) {
         const leftCard = document.createElement('button');
         leftCard.type = 'button';
         leftCard.className = 'match-pair-item';
+        addStagger(leftCard, leftIndex);
         if (answer.selectedLeft === leftIndex) leftCard.classList.add('selected');
         leftCard.setAttribute('aria-label', `จับคู่อย่างกับ ${item.label}`);
         leftCard.innerHTML = `<span class="image-emoji">${item.emoji}</span><span>${item.label}</span>`;
@@ -491,6 +529,7 @@ function buildAnswerControl(q) {
         const rightCard = document.createElement('button');
         rightCard.type = 'button';
         rightCard.className = 'match-pair-item match-pair-right';
+        addStagger(rightCard, rightCol.children.length + 2);
         rightCard.draggable = true;
         const matchedLeft = answer.pairs.findIndex(pair => pair === rightIndex);
         if (matchedLeft !== -1) rightCard.classList.add('matched');
@@ -545,6 +584,7 @@ function buildAnswerControl(q) {
         const step = set.steps.find(s => s.id === stepId);
         const item = document.createElement('li');
         item.className = 'sequence-item';
+        addStagger(item, index);
         item.draggable = true;
         item.dataset.stepId = stepId;
         item.innerHTML = `<span class="drag-handle" aria-hidden="true">⋮⋮</span><span>${step.label}</span>`;
@@ -611,6 +651,7 @@ function buildAnswerControl(q) {
     case 'self-check': {
       const box = document.createElement('label');
       box.className = 'self-check-box';
+      addStagger(box, 0);
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.checked = !!state.answers[q.id];
@@ -971,4 +1012,5 @@ function renderMarigoldRing(svg, filledCount, totalCount, level, cx = 100, cy = 
 /* ---------------------------------------------------------
    INIT
    --------------------------------------------------------- */
+updateFontSizeControls();
 render();
