@@ -1,0 +1,885 @@
+/* ==========================================================
+   DemenScan app controller
+
+   This file controls the assessment flow:
+   - screen navigation
+   - answer rendering
+   - scoring
+   - result feedback
+   - text-to-speech
+   - progress ring
+
+   Question content lives in sections/section1.js through section6.js.
+   Runtime state stays in memory only; nothing is saved to localStorage.
+   ========================================================== */
+
+/* ---------------------------------------------------------
+   1) Section Data
+   --------------------------------------------------------- */
+
+const {
+  RECALL_WORDS,
+  THAI_DAYS,
+  THAI_MONTHS,
+  MATCH_PAIR_SETS,
+  SEQUENCE_SETS,
+  shuffleArray,
+} = window.DemenScanData;
+
+const SECTIONS = window.DemenScanSections;
+if (!Array.isArray(SECTIONS) || SECTIONS.length !== 6) {
+  throw new Error('DemenScan requires all 6 section files to load before app.js');
+}
+
+const LIKERT5_OPTIONS = ['เห็นด้วยอย่างยิ่ง','เห็นด้วย','เฉยๆ','ไม่เห็นด้วย','ไม่เห็นด้วยอย่างยิ่ง'];
+const LIKERT5_POINTS  = [5,4,3,2,1];
+const LIKERT3_OPTIONS = ['ดีมาก','ปานกลาง','ต้องปรับปรุง'];
+const FREQ4_OPTIONS   = ['ไม่เคยเลย','นานๆ ครั้ง','บ่อยครั้ง','ประจำทุกวัน'];
+const FREQ4_POINTS    = [4,3,2,1];
+
+/* ---------------------------------------------------------
+   2) STATE
+   --------------------------------------------------------- */
+const state = {
+  screen: 'welcome',      // 'welcome' | 'question' | 'result'
+  sectionIdx: 0,          // 0..5
+  questionIdx: 0,         // index within section.questions
+  answers: {},            // questionId -> raw value
+};
+
+function flatIndex() {
+  let idx = 0;
+  for (let i = 0; i < state.sectionIdx; i++) idx += SECTIONS[i].questions.length;
+  return idx + state.questionIdx;
+}
+function totalQuestions() {
+  return SECTIONS.reduce((sum, s) => sum + s.questions.length, 0);
+}
+
+/* ---------------------------------------------------------
+   3) DOM refs
+   --------------------------------------------------------- */
+const screenWelcome = document.getElementById('screen-welcome');
+const screenQuestion = document.getElementById('screen-question');
+const screenResult = document.getElementById('screen-result');
+const progressWrap = document.getElementById('progress-wrap');
+const sectionTabs = document.getElementById('section-tabs');
+
+document.getElementById('btn-start').addEventListener('click', () => {
+  state.screen = 'question';
+  state.sectionIdx = 0;
+  state.questionIdx = 0;
+  render();
+});
+document.getElementById('btn-prev').addEventListener('click', goPrev);
+document.getElementById('btn-next').addEventListener('click', goNext);
+document.getElementById('btn-restart').addEventListener('click', () => {
+  state.screen = 'welcome';
+  state.sectionIdx = 0;
+  state.questionIdx = 0;
+  state.answers = {};
+  render();
+});
+
+document.getElementById('font-larger').addEventListener('click', () => cycleFontSize(1));
+document.getElementById('font-smaller').addEventListener('click', () => cycleFontSize(-1));
+const FONT_CLASSES = ['', 'font-large', 'font-xlarge'];
+let fontStep = 0;
+function cycleFontSize(dir) {
+  fontStep = Math.min(2, Math.max(0, fontStep + dir));
+  document.body.classList.remove('font-large', 'font-xlarge');
+  if (FONT_CLASSES[fontStep]) document.body.classList.add(FONT_CLASSES[fontStep]);
+}
+
+/* ---------------------------------------------------------
+   4) Text To Speech
+   --------------------------------------------------------- */
+
+// Keep the ElevenLabs API key on the backend. The browser only calls this proxy.
+const TTS_ENDPOINT = '/api/tts';
+
+const ttsCache = new Map(); // text -> loaded audio object URL
+let currentAudio = null;
+
+async function speak(text, btnEl) {
+  const cleanText = String(text ?? '').trim();
+  if (!cleanText) return;
+
+  // Stop the current audio before playing the next prompt.
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+  }
+
+  const originalLabel = btnEl ? btnEl.innerHTML : null;
+  setSpeakButtonLoading(btnEl, true);
+
+  try {
+    let audioUrl = ttsCache.get(cleanText);
+
+    if (!audioUrl) {
+      const res = await fetch(TTS_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: cleanText }),
+      });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `TTS server error: ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      audioUrl = URL.createObjectURL(blob);
+      ttsCache.set(cleanText, audioUrl);
+    }
+
+    const audio = new Audio(audioUrl);
+    currentAudio = audio;
+    audio.addEventListener('ended', () => { currentAudio = null; });
+    setSpeakButtonLoading(btnEl, false, originalLabel);
+    await audio.play();
+  } catch (err) {
+    console.error('AI TTS (ElevenLabs) ล้มเหลว, ใช้ Web Speech API สำรองแทน:', err);
+    setSpeakButtonLoading(btnEl, false, originalLabel);
+    speakFallback(cleanText);
+  }
+}
+
+function setSpeakButtonLoading(btnEl, isLoading, restoreLabel) {
+  if (!btnEl) return;
+  btnEl.disabled = isLoading;
+  if (isLoading) {
+    btnEl.dataset.prevLabel = btnEl.innerHTML;
+    btnEl.innerHTML = btnEl.classList.contains('btn-speak-small') ? '⏳' : '⏳ กำลังโหลดเสียง...';
+  } else {
+    btnEl.innerHTML = restoreLabel ?? btnEl.dataset.prevLabel ?? '🔊';
+  }
+}
+
+// สำรอง: Web Speech API ของเบราว์เซอร์ ใช้เฉพาะตอนเรียก AI TTS ไม่สำเร็จ
+// (เช่น backend ล่ม, ไม่มีอินเทอร์เน็ต, โควตา ElevenLabs หมด)
+function speakFallback(text) {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'th-TH';
+  utter.rate = 0.95;
+  window.speechSynthesis.speak(utter);
+}
+
+document.querySelectorAll('.btn-speak[data-speak-target]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = document.getElementById(btn.dataset.speakTarget);
+    if (target) speak(target.textContent, btn);
+  });
+});
+document.getElementById('btn-speak-question').addEventListener('click', (e) => {
+  const q = currentQuestion();
+  if (q) speak(q.text + (q.options ? '. ตัวเลือก: ' + (q.options.join(', ')) : ''), e.currentTarget);
+});
+
+/* ---------------------------------------------------------
+   5) NAVIGATION
+   --------------------------------------------------------- */
+function currentSection() { return SECTIONS[state.sectionIdx]; }
+function currentQuestion() { return currentSection().questions[state.questionIdx]; }
+
+function goNext() {
+  const section = currentSection();
+  if (state.questionIdx < section.questions.length - 1) {
+    state.questionIdx++;
+  } else if (state.sectionIdx < SECTIONS.length - 1) {
+    state.sectionIdx++;
+    state.questionIdx = 0;
+  } else {
+    state.screen = 'result';
+  }
+  render();
+}
+function goPrev() {
+  if (state.questionIdx > 0) {
+    state.questionIdx--;
+  } else if (state.sectionIdx > 0) {
+    state.sectionIdx--;
+    state.questionIdx = SECTIONS[state.sectionIdx].questions.length - 1;
+  } else {
+    state.screen = 'welcome';
+  }
+  render();
+}
+
+/* ---------------------------------------------------------
+   6) RENDERING
+   --------------------------------------------------------- */
+function render() {
+  screenWelcome.hidden = state.screen !== 'welcome';
+  screenQuestion.hidden = state.screen !== 'question';
+  screenResult.hidden = state.screen !== 'result';
+  progressWrap.hidden = state.screen === 'welcome';
+  sectionTabs.hidden = state.screen !== 'question';
+
+  if (state.screen === 'question') renderQuestion();
+  if (state.screen === 'result') renderResult();
+  if (state.screen !== 'welcome') renderProgressRing();
+  window.scrollTo(0, 0);
+}
+
+function renderQuestion() {
+  const section = currentSection();
+  const q = currentQuestion();
+
+  document.getElementById('progress-section-name').textContent = `ส่วนที่ ${section.id}: ${section.title}`;
+  document.getElementById('progress-fraction').textContent = `${state.sectionIdx + 1} / ${SECTIONS.length}`;
+  document.getElementById('q-index').textContent = `ข้อ ${state.questionIdx + 1} จาก ${section.questions.length}`;
+  document.getElementById('q-text').textContent = q.text;
+
+  const hintEl = document.getElementById('q-hint');
+  if (q.hint) { hintEl.hidden = false; hintEl.textContent = q.hint; }
+  else { hintEl.hidden = true; }
+
+  const area = document.getElementById('q-answer-area');
+  area.innerHTML = '';
+  area.appendChild(buildAnswerControl(q));
+
+  document.getElementById('btn-prev').disabled = false;
+  const isLastQuestion = state.sectionIdx === SECTIONS.length - 1 &&
+    state.questionIdx === section.questions.length - 1;
+  const nextBtn = document.getElementById('btn-next');
+  nextBtn.setAttribute('aria-label', isLastQuestion ? 'ดูผลลัพธ์' : 'ถัดไป');
+  nextBtn.innerHTML = isLastQuestion
+    ? '<span class="btn-label">ดูผลลัพธ์</span><span class="btn-icon" aria-hidden="true">✓</span>'
+    : '<span class="btn-label">ถัดไป</span><span class="btn-icon" aria-hidden="true">→</span>';
+
+  document.getElementById('skip-warning').hidden = isAnswered(q);
+  renderSectionTabs();
+}
+
+function renderSectionTabs() {
+  sectionTabs.innerHTML = '';
+
+  SECTIONS.forEach((section, index) => {
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'section-tab';
+    tab.setAttribute('aria-label', `ไปยังส่วนที่ ${section.id}: ${section.title}`);
+
+    if (index < state.sectionIdx) tab.classList.add('completed');
+    if (index === state.sectionIdx) {
+      tab.classList.add('active');
+      tab.setAttribute('aria-current', 'step');
+    }
+
+    tab.innerHTML = `
+      <span class="section-tab-number" aria-hidden="true">${section.id}</span>
+      <span class="section-tab-text">
+        <span class="section-tab-kicker">ส่วนที่ ${section.id}</span>
+        <span class="section-tab-title">${section.title}</span>
+      </span>
+    `;
+
+    tab.addEventListener('click', () => {
+      state.screen = 'question';
+      state.sectionIdx = index;
+      state.questionIdx = 0;
+      render();
+    });
+
+    sectionTabs.appendChild(tab);
+  });
+
+  const activeTab = sectionTabs.querySelector('.section-tab.active');
+  if (activeTab) {
+    requestAnimationFrame(() => {
+      activeTab.scrollIntoView({ inline: 'center', block: 'nearest' });
+    });
+  }
+}
+
+function buildAnswerControl(q) {
+  const wrap = document.createElement('div');
+
+  const makeChoiceButtons = (options, pointsMap) => {
+    options.forEach((label, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn';
+      if (state.answers[q.id] === label) btn.classList.add('selected');
+      btn.innerHTML = `<span class="dot"></span><span>${label}</span>`;
+      btn.addEventListener('click', () => {
+        state.answers[q.id] = label;
+        if (pointsMap) state.answers[q.id + '__points'] = pointsMap[i];
+        renderQuestion();
+      });
+      wrap.appendChild(btn);
+    });
+  };
+
+  const makeMultiChoiceButtons = (options) => {
+    const selected = Array.isArray(state.answers[q.id]) ? state.answers[q.id] : [];
+    const grid = document.createElement('div');
+    grid.className = 'multi-choice-grid';
+
+    options.forEach((label) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn multi-choice-btn';
+      if (selected.includes(label)) btn.classList.add('selected');
+      btn.innerHTML = `<span class="dot"></span><span>${label}</span>`;
+      btn.addEventListener('click', () => {
+        const current = Array.isArray(state.answers[q.id]) ? state.answers[q.id] : [];
+        state.answers[q.id] = current.includes(label)
+          ? current.filter(item => item !== label)
+          : [...current, label];
+        renderQuestion();
+      });
+      grid.appendChild(btn);
+    });
+
+    wrap.appendChild(grid);
+  };
+
+  const makeThreeTextInputs = () => {
+    const values = Array.isArray(state.answers[q.id]) ? state.answers[q.id] : ['', '', ''];
+    const grid = document.createElement('div');
+    grid.className = 'multi-input-grid';
+
+    [0, 1, 2].forEach((index) => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'text-input';
+      input.placeholder = `คำที่ ${index + 1}`;
+      input.value = values[index] ?? '';
+      input.addEventListener('input', () => {
+        const next = Array.isArray(state.answers[q.id]) ? [...state.answers[q.id]] : ['', '', ''];
+        next[index] = input.value;
+        state.answers[q.id] = next;
+      });
+      grid.appendChild(input);
+    });
+
+    wrap.appendChild(grid);
+  };
+
+  switch (q.type) {
+    case 'choice':
+      makeChoiceButtons(q.options);
+      break;
+    case 'multi-choice-exact':
+      makeMultiChoiceButtons(q.options);
+      break;
+    case 'likert5':
+      makeChoiceButtons(LIKERT5_OPTIONS, LIKERT5_POINTS);
+      break;
+    case 'likert3':
+      makeChoiceButtons(LIKERT3_OPTIONS);
+      break;
+    case 'freq4':
+      makeChoiceButtons(FREQ4_OPTIONS, FREQ4_POINTS);
+      break;
+    case 'boolean':
+      makeChoiceButtons(['ถูก', 'ผิด']);
+      break;
+    case 'number':
+    case 'number-info': {
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.className = 'number-input';
+      input.value = state.answers[q.id] ?? '';
+      input.addEventListener('input', () => { state.answers[q.id] = input.value; });
+      wrap.appendChild(input);
+      break;
+    }
+    case 'time-info': {
+      const input = document.createElement('input');
+      input.type = 'time';
+      input.className = 'text-input';
+      input.value = state.answers[q.id] ?? '';
+      input.addEventListener('input', () => { state.answers[q.id] = input.value; });
+      wrap.appendChild(input);
+      break;
+    }
+    case 'text-exact':
+    case 'text-presence':
+    case 'recall-match': {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'text-input';
+      input.value = state.answers[q.id] ?? '';
+      input.addEventListener('input', () => { state.answers[q.id] = input.value; });
+      wrap.appendChild(input);
+      break;
+    }
+    case 'recall-three-inputs':
+      makeThreeTextInputs();
+      break;
+    case 'dynamic-day': {
+      makeChoiceButtons(THAI_DAYS.map(day => `วัน${day}`));
+      break;
+    }
+    case 'dynamic-month': {
+      makeChoiceButtons(THAI_MONTHS);
+      break;
+    }
+    case 'find-occluded': {
+      const grid = document.createElement('div');
+      grid.className = 'image-choice-grid';
+      q.icons.forEach((icon, i) => {
+        const box = document.createElement('button');
+        box.type = 'button';
+        box.className = 'image-choice-box';
+        if (state.answers[q.id] === i) box.classList.add('selected');
+        box.setAttribute('aria-label', `ตัวเลือกภาพที่ ${i + 1}`);
+        box.innerHTML = `<span class="image-emoji">${icon.emoji}</span>`;
+        if (i === q.occludedIndex) {
+          const patch = document.createElement('span');
+          patch.className = 'occlusion-patch';
+          patch.setAttribute('aria-hidden', 'true');
+          if (q.occlusion) {
+            ['top', 'right', 'bottom', 'left', 'width', 'height'].forEach((key) => {
+              if (q.occlusion[key]) patch.style[key] = q.occlusion[key];
+            });
+            if (q.occlusion.rotate) patch.style.setProperty('--patch-rotate', q.occlusion.rotate);
+          }
+          box.appendChild(patch);
+        }
+        box.addEventListener('click', () => {
+          state.answers[q.id] = i;
+          renderQuestion();
+        });
+        grid.appendChild(box);
+      });
+      wrap.appendChild(grid);
+      break;
+    }
+    case 'match-pair': {
+      const set = MATCH_PAIR_SETS[q.matchSetIdx];
+      if (!state.answers[q.id]) {
+        state.answers[q.id] = {
+          order: shuffleArray(set.right.map((item, index) => index)),
+          pairs: set.left.map(() => null),
+          selectedLeft: null,
+        };
+      }
+      const answer = state.answers[q.id];
+      const leftCol = document.createElement('div');
+      const rightCol = document.createElement('div');
+      leftCol.className = 'match-pair-column';
+      rightCol.className = 'match-pair-column';
+
+      const instructions = document.createElement('p');
+      instructions.className = 'q-hint';
+      instructions.textContent = 'ลากหรือแตะขวาแล้ววางไว้ที่ซ้ายเพื่อจับคู่ภาพที่เกี่ยวข้องกัน';
+      wrap.appendChild(instructions);
+
+      set.left.forEach((item, leftIndex) => {
+        const leftCard = document.createElement('button');
+        leftCard.type = 'button';
+        leftCard.className = 'match-pair-item';
+        if (answer.selectedLeft === leftIndex) leftCard.classList.add('selected');
+        leftCard.setAttribute('aria-label', `จับคู่อย่างกับ ${item.label}`);
+        leftCard.innerHTML = `<span class="image-emoji">${item.emoji}</span><span>${item.label}</span>`;
+        leftCard.addEventListener('click', () => {
+          answer.selectedLeft = answer.selectedLeft === leftIndex ? null : leftIndex;
+          state.answers[q.id] = answer;
+          renderQuestion();
+        });
+        leftCard.addEventListener('dragover', (event) => {
+          event.preventDefault();
+        });
+        leftCard.addEventListener('drop', (event) => {
+          event.preventDefault();
+          const rightIndex = Number(event.dataTransfer.getData('text/plain'));
+          if (Number.isFinite(rightIndex)) {
+            answer.pairs[leftIndex] = rightIndex;
+            answer.selectedLeft = null;
+            state.answers[q.id] = answer;
+            renderQuestion();
+          }
+        });
+        if (answer.pairs[leftIndex] !== null) {
+          const paired = set.right[answer.pairs[leftIndex]];
+          const pairedLabel = document.createElement('div');
+          pairedLabel.className = 'match-pair-label';
+          pairedLabel.textContent = `จับคู่กับ ${paired.label}`;
+          leftCard.appendChild(pairedLabel);
+        }
+        leftCol.appendChild(leftCard);
+      });
+
+      answer.order.forEach((rightIndex) => {
+        const item = set.right[rightIndex];
+        const rightCard = document.createElement('button');
+        rightCard.type = 'button';
+        rightCard.className = 'match-pair-item match-pair-right';
+        rightCard.draggable = true;
+        const matchedLeft = answer.pairs.findIndex(pair => pair === rightIndex);
+        if (matchedLeft !== -1) rightCard.classList.add('matched');
+        rightCard.setAttribute('aria-label', `${item.label} ${matchedLeft !== -1 ? 'จับคู่แล้ว' : 'ยังไม่จับคู่'}`);
+        rightCard.innerHTML = `<span class="image-emoji">${item.emoji}</span><span>${item.label}</span>`;
+        rightCard.addEventListener('dragstart', (event) => {
+          event.dataTransfer.setData('text/plain', String(rightIndex));
+          event.dataTransfer.effectAllowed = 'move';
+        });
+        rightCard.addEventListener('click', () => {
+          if (answer.selectedLeft !== null) {
+            answer.pairs[answer.selectedLeft] = rightIndex;
+            answer.selectedLeft = null;
+            state.answers[q.id] = answer;
+            renderQuestion();
+          } else if (matchedLeft !== -1) {
+            answer.pairs[matchedLeft] = null;
+            state.answers[q.id] = answer;
+            renderQuestion();
+          }
+        });
+        rightCol.appendChild(rightCard);
+      });
+
+      const container = document.createElement('div');
+      container.className = 'match-pair-wrap';
+      container.appendChild(leftCol);
+      container.appendChild(rightCol);
+      wrap.appendChild(container);
+      break;
+    }
+    case 'sequence-order': {
+      const set = SEQUENCE_SETS[q.sequenceSetIdx];
+      if (!state.answers[q.id]) {
+        state.answers[q.id] = { order: shuffleArray(set.steps.map(step => step.id)) };
+      }
+      const answer = state.answers[q.id];
+      const list = document.createElement('ol');
+      list.className = 'sequence-list';
+      list.setAttribute('aria-label', 'รายการขั้นตอนที่สามารถลากเพื่อจัดลำดับ');
+
+      const moveItem = (fromIndex, toIndex) => {
+        const nextOrder = [...answer.order];
+        const [item] = nextOrder.splice(fromIndex, 1);
+        nextOrder.splice(toIndex, 0, item);
+        answer.order = nextOrder;
+        state.answers[q.id] = answer;
+        renderQuestion();
+      };
+
+      answer.order.forEach((stepId, index) => {
+        const step = set.steps.find(s => s.id === stepId);
+        const item = document.createElement('li');
+        item.className = 'sequence-item';
+        item.draggable = true;
+        item.dataset.stepId = stepId;
+        item.innerHTML = `<span class="drag-handle" aria-hidden="true">⋮⋮</span><span>${step.label}</span>`;
+
+        item.addEventListener('dragstart', (event) => {
+          event.dataTransfer.setData('text/plain', stepId);
+          event.dataTransfer.effectAllowed = 'move';
+          item.classList.add('dragging');
+        });
+
+        item.addEventListener('dragend', () => {
+          item.classList.remove('dragging');
+        });
+
+        item.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          item.classList.add('drag-over');
+        });
+
+        item.addEventListener('dragleave', () => {
+          item.classList.remove('drag-over');
+        });
+
+        item.addEventListener('drop', (event) => {
+          event.preventDefault();
+          item.classList.remove('drag-over');
+          const draggedId = event.dataTransfer.getData('text/plain');
+          if (!draggedId || draggedId === stepId) return;
+          const fromIndex = answer.order.indexOf(draggedId);
+          const toIndex = answer.order.indexOf(stepId);
+          if (fromIndex !== -1 && toIndex !== -1) {
+            moveItem(fromIndex, toIndex);
+          }
+        });
+
+        const controls = document.createElement('div');
+        controls.className = 'sequence-controls';
+        const upBtn = document.createElement('button');
+        upBtn.type = 'button';
+        upBtn.className = 'sequence-control-btn';
+        upBtn.textContent = '↑';
+        upBtn.disabled = index === 0;
+        upBtn.addEventListener('click', () => moveItem(index, index - 1));
+        const downBtn = document.createElement('button');
+        downBtn.type = 'button';
+        downBtn.className = 'sequence-control-btn';
+        downBtn.textContent = '↓';
+        downBtn.disabled = index === answer.order.length - 1;
+        downBtn.addEventListener('click', () => moveItem(index, index + 1));
+        controls.appendChild(upBtn);
+        controls.appendChild(downBtn);
+        item.appendChild(controls);
+
+        list.appendChild(item);
+      });
+
+      const note = document.createElement('p');
+      note.className = 'q-hint';
+      note.textContent = 'เรียงจากสิ่งที่ควรทำก่อน ไปจนถึงสิ่งที่ควรทำหลังสุด';
+      wrap.appendChild(note);
+      wrap.appendChild(list);
+      break;
+    }
+    case 'self-check': {
+      const box = document.createElement('label');
+      box.className = 'self-check-box';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!state.answers[q.id];
+      cb.addEventListener('change', () => { state.answers[q.id] = cb.checked; });
+      box.appendChild(cb);
+      const span = document.createElement('span');
+      span.textContent = 'ตอบแล้ว / ตอบได้ถูกต้อง (ยืนยันโดยตนเองหรือผู้ดูแล)';
+      box.appendChild(span);
+      wrap.appendChild(box);
+      break;
+    }
+    default:
+      wrap.textContent = '(ยังไม่รองรับประเภทคำถามนี้)';
+  }
+  return wrap;
+}
+
+/* ---------------------------------------------------------
+   7) SCORING
+   --------------------------------------------------------- */
+function normalize(str) {
+  return String(str ?? '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+function isAnswered(q) {
+  const raw = state.answers[q.id];
+  if (Array.isArray(raw)) return raw.some(value => normalize(value));
+  if (typeof raw === 'boolean') return raw === true;
+  return raw !== undefined && raw !== '' && raw !== null;
+}
+
+function scoreQuestion(q) {
+  const raw = state.answers[q.id];
+  if (raw === undefined || raw === '' || raw === null) return 0;
+
+  switch (q.type) {
+    case 'freq4':
+      return state.answers[q.id + '__points'] ?? 0;
+    case 'number':
+      return Number(raw) === q.answer ? 1 : 0;
+    case 'boolean': {
+      const boolVal = raw === 'ถูก';
+      return boolVal === q.answer ? 1 : 0;
+    }
+    case 'text-exact':
+      return normalize(raw).includes(normalize(q.answer)) || normalize(q.answer).includes(normalize(raw)) ? 1 : 0;
+    case 'text-presence':
+      return normalize(raw) ? 1 : 0;
+    case 'choice':
+      return q.answer ? (raw === q.answer ? 1 : 0) : 0;
+    case 'multi-choice-exact': {
+      if (!Array.isArray(raw) || !Array.isArray(q.answer)) return 0;
+      const given = raw.map(normalize).filter(Boolean).sort();
+      const expected = q.answer.map(normalize).sort();
+      return given.length === expected.length &&
+        given.every((value, index) => value === expected[index])
+        ? 1 : 0;
+    }
+    case 'recall-match': {
+      const given = normalize(raw);
+      const hits = RECALL_WORDS.filter(w => given.includes(normalize(w))).length;
+      return hits === RECALL_WORDS.length ? 1 : 0;
+    }
+    case 'recall-three-inputs': {
+      const given = Array.isArray(raw) ? normalize(raw.join(' ')) : normalize(raw);
+      const answers = Array.isArray(q.answer) ? q.answer : RECALL_WORDS;
+      const hits = answers.filter(word => given.includes(normalize(word))).length;
+      return hits === answers.length ? 1 : 0;
+    }
+    case 'dynamic-day': {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const expected = THAI_DAYS[yesterday.getDay()];
+      return normalize(raw).includes(normalize(expected)) ? 1 : 0;
+    }
+    case 'dynamic-month': {
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      const expected = THAI_MONTHS[nextMonth.getMonth()];
+      return normalize(raw).includes(normalize(expected)) ? 1 : 0;
+    }
+    case 'match-pair': {
+      if (!raw || !Array.isArray(raw.pairs)) return 0;
+      const set = MATCH_PAIR_SETS[q.matchSetIdx];
+      return raw.pairs.length === set.left.length &&
+        raw.pairs.every((rightIndex, leftIndex) => rightIndex === leftIndex)
+        ? 1 : 0;
+    }
+    case 'sequence-order': {
+      if (!raw || !Array.isArray(raw.order)) return 0;
+      const set = SEQUENCE_SETS[q.sequenceSetIdx];
+      return raw.order.length === set.correctOrder.length &&
+        raw.order.every((stepId, index) => stepId === set.correctOrder[index])
+        ? 1 : 0;
+    }
+    case 'self-check':
+      return raw === true ? 1 : 0;
+    case 'find-occluded':
+      return raw === q.occludedIndex ? 1 : 0;
+    default:
+      return 0;
+  }
+}
+
+function computeCognitiveScore() {
+  let total = 0;
+  const bySection = {};
+  [4, 5, 6].forEach(sectionId => {
+    const section = SECTIONS.find(s => s.id === sectionId);
+    const pts = section.questions.reduce((sum, q) => sum + scoreQuestion(q), 0);
+    bySection[sectionId] = pts;
+    total += pts;
+  });
+  return { total, bySection };
+}
+
+function riskLevel(score) {
+  if (score >= 78) return 'low';
+  if (score >= 59) return 'moderate';
+  return 'high';
+}
+
+/* ---------------------------------------------------------
+   8) PERSONALIZED FEEDBACK (from Section 1 answers)
+   --------------------------------------------------------- */
+function sleepHours() {
+  const sleep = state.answers['s1q11'];
+  const wake = state.answers['s1q12'];
+  if (!sleep || !wake) return null;
+  const [sh, sm] = sleep.split(':').map(Number);
+  const [wh, wm] = wake.split(':').map(Number);
+  let mins = (wh * 60 + wm) - (sh * 60 + sm);
+  if (mins < 0) mins += 24 * 60;
+  return mins / 60;
+}
+
+function buildFeedbackCards(level) {
+  const cards = [];
+  const hrs = sleepHours();
+
+  if (hrs !== null && hrs < 7) {
+    cards.push({
+      title: '💤 การนอนหลับ',
+      body: 'การนอนหลับน้อยกว่า 7 ชั่วโมง เพิ่มความเสี่ยงสมองเสื่อมได้ถึง 44% เทียบกับคนที่นอนเพียงพอ ลองใช้ฟีเจอร์ "Bedtime" หรือเสียงธรรมชาติในสมาร์ทโฟนช่วยผ่อนคลายก่อนนอน และเปิดโหมด "ห้ามรบกวน" ตอนกลางคืน',
+    });
+  }
+  const activity = state.answers['s1q8'];
+  if (activity === 'ดูทีวี' || activity === 'เล่นมือถือ') {
+    cards.push({
+      title: '🚶 การเคลื่อนไหวร่างกาย',
+      body: 'การเพิ่มการขยับร่างกายเพียง 1 วัน/สัปดาห์ ช่วยลดความเสี่ยงสมองเสื่อมได้ถึง 26% ลองใช้แอปนับก้าวเดิน หรือค้นหาคลิป "บริหารร่างกายสำหรับผู้สูงวัย" ใน YouTube เพื่อทำตามที่บ้าน',
+    });
+  }
+  const alcohol = state.answers['s1q14'];
+  if (alcohol === 'ดื่มประจำ' || alcohol === 'ดื่มเฉพาะงานสังคม') {
+    cards.push({
+      title: '🍶 พฤติกรรมการดื่มแอลกอฮอล์',
+      body: 'การดื่มแอลกอฮอล์เพิ่มความเสี่ยงสมองเสื่อมได้ถึง 89% ลองฟังพอดแคสต์ให้ความรู้เรื่องการเลิกเหล้าจากกรมอนามัย หรือแอด LINE Official Account สายด่วนเลิกสุราเพื่อรับคำปรึกษา',
+    });
+  }
+  // TODO(dev): เพิ่มคำถามโรคประจำตัว (เบาหวาน/ความดัน) ในส่วนที่ 1 หากต้องการการ์ดนี้
+
+  if (level === 'high') {
+    cards.push({
+      title: '👪 สำหรับญาติผู้ดูแล',
+      body: 'แนะนำให้ติดตั้งแอปติดตามตำแหน่ง (เช่น การแชร์ตำแหน่งใน Google Maps) ในมือถือของผู้สูงอายุเพื่อป้องกันการพลัดหลง และตั้งค่า "Emergency Contact" ไว้ในหน้าจอโทรศัพท์ พร้อมทั้งนำผลประเมินนี้ไปปรึกษาแพทย์เฉพาะทางระบบประสาทหรืออายุรกรรมผู้สูงอายุ',
+      urgent: true,
+    });
+  }
+  return cards;
+}
+
+/* ---------------------------------------------------------
+   9) RESULT SCREEN
+   --------------------------------------------------------- */
+function renderResult() {
+  const { total } = computeCognitiveScore();
+  const level = riskLevel(total);
+
+  document.getElementById('result-score-number').textContent = total;
+
+  const levelEl = document.getElementById('result-level');
+  levelEl.className = `result-level ${level}`;
+  levelEl.textContent = level === 'low' ? 'ความเสี่ยงต่ำ'
+    : level === 'moderate' ? 'ความเสี่ยงปานกลาง / เฝ้าระวัง'
+    : 'ความเสี่ยงสูง';
+
+  const messages = {
+    low: 'เยี่ยมมากค่ะ/ครับ! การทำงานของสมองของท่านอยู่ในเกณฑ์ดีเยี่ยม รักษาพฤติกรรมสุขภาพดี ๆ แบบนี้ไว้นะคะ/ครับ',
+    moderate: 'ทำได้ดีที่ทำแบบประเมินจนจบ ผลของท่านเริ่มมีสัญญาณถดถอยเล็กน้อย ลองปรับพฤติกรรมและฝึกบริหารสมองอย่างจริงจังดูนะคะ/ครับ',
+    high: 'ขอบคุณที่ตั้งใจทำแบบประเมินจนจบนะคะ/ครับ ผลลัพธ์นี้ชี้ว่าควรปรึกษาแพทย์เพื่อตรวจวินิจฉัยเพิ่มเติม การพบแพทย์แต่เนิ่น ๆ ช่วยดูแลสุขภาพสมองได้ดีที่สุด',
+  };
+  document.getElementById('result-message').textContent = messages[level];
+
+  const feedbackWrap = document.getElementById('result-feedback');
+  feedbackWrap.innerHTML = '';
+  buildFeedbackCards(level).forEach(card => {
+    const div = document.createElement('div');
+    div.className = 'feedback-card' + (card.urgent ? ' urgent' : '');
+    div.innerHTML = `<h3>${card.title}</h3><p>${card.body}</p>`;
+    feedbackWrap.appendChild(div);
+  });
+
+  renderMarigoldRing(document.getElementById('marigold-ring-full'), 6, 6, level);
+}
+
+/* ---------------------------------------------------------
+   10) MARIGOLD PROGRESS RING (signature visual element)
+   วาดกลีบดอกดาวเรือง 6 กลีบ = 6 ส่วนของแบบประเมิน
+   --------------------------------------------------------- */
+function petalPath(cx, cy, r, angleDeg, size) {
+  const rad = (angleDeg * Math.PI) / 180;
+  const x = cx + r * Math.cos(rad);
+  const y = cy + r * Math.sin(rad);
+  return { x, y };
+}
+
+function renderProgressRing() {
+  const svg = document.getElementById('marigold-ring');
+  renderMarigoldRing(svg, state.sectionIdx + (state.screen === 'result' ? 1 : 0), 6, riskLevel(computeCognitiveScore().total), 60, 60, 44);
+}
+
+function renderMarigoldRing(svg, filledCount, totalCount, level, cx = 100, cy = 100, r = 70) {
+  if (!svg) return;
+  svg.innerHTML = '';
+  const petalR = r * 0.32;
+  for (let i = 0; i < totalCount; i++) {
+    const angle = (360 / totalCount) * i - 90;
+    const { x, y } = petalPath(cx, cy, r * 0.62, angle, petalR);
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', x);
+    circle.setAttribute('cy', y);
+    circle.setAttribute('r', petalR);
+    circle.setAttribute('class', 'petal' + (i < filledCount ? ' filled' : ''));
+    svg.appendChild(circle);
+  }
+  const center = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  center.setAttribute('cx', cx);
+  center.setAttribute('cy', cy);
+  center.setAttribute('r', r * 0.22);
+  center.setAttribute('fill', filledCount >= totalCount ? 'var(--forest)' : 'var(--sand-deep)');
+  center.setAttribute('stroke', 'var(--forest)');
+  center.setAttribute('stroke-width', '2');
+  svg.appendChild(center);
+}
+
+/* ---------------------------------------------------------
+   INIT
+   --------------------------------------------------------- */
+render();

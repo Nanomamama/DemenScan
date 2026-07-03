@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=2.0">
+<title>DemenScan — แบบประเมินสมองด้วยตนเอง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- แถบเครื่องมือบนสุด: ปรับขนาดตัวอักษร -->
+  <header class="topbar">
+    <div class="brand">🌼 <span>DemenScan</span></div>
+    <div class="text-size-controls" role="group" aria-label="ปรับขนาดตัวอักษร">
+      <button id="font-smaller" class="btn-chip" aria-label="ลดขนาดตัวอักษร">ก−</button>
+      <button id="font-larger" class="btn-chip" aria-label="เพิ่มขนาดตัวอักษร">ก+</button>
+    </div>
+  </header>
+
+  <!-- แถบความคืบหน้า: วงแหวนพวงมาลัยดาวเรือง -->
+  <div class="progress-wrap" id="progress-wrap" hidden>
+    <svg id="marigold-ring" viewBox="0 0 120 120" width="56" height="56" aria-hidden="true">
+      <!-- petals injected by app.js -->
+    </svg>
+    <div class="progress-label">
+      <span id="progress-section-name">ส่วนที่ 1</span>
+      <span id="progress-fraction">1 / 6</span>
+    </div>
+  </div>
+
+  <nav class="section-tabs" id="section-tabs" aria-label="เลือกส่วนแบบประเมิน" hidden>
+    <!-- section tabs injected by app.js -->
+  </nav>
+
+  <main id="app" class="app-shell">
+
+    <!-- ========== หน้า 0: WELCOME ========== -->
+    <section id="screen-welcome" class="screen" data-screen="welcome">
+      <div class="welcome-card">
+        <div class="welcome-emblem" aria-hidden="true">🌼</div>
+        <h1>DemenScan</h1>
+        <p class="lead">แบบสำรวจและประเมินประสิทธิภาพการทำงานของสมองด้วยตนเอง สำหรับผู้สูงวัย</p>
+        <p class="muted">ใช้เวลาประมาณ 20–30 นาที ตอบตามความเป็นจริง ไม่มีคำตอบผิดหรือถูกในการใช้ชีวิต</p>
+
+        <button class="btn-speak" data-speak-target="welcome-intro" aria-label="ฟังคำอธิบาย">
+          🔊 ฟังคำอธิบาย
+        </button>
+        <p id="welcome-intro" class="sr-only-text">
+          ยินดีต้อนรับสู่ดีเมนสแกน แบบประเมินสมองด้วยตนเองสำหรับผู้สูงวัย ท่านสามารถกดฟังเสียงคำถามได้ทุกข้อ
+          ข้อมูลของท่านจะไม่มีการระบุชื่อหรือที่อยู่ ขอให้ท่านตอบตามความเป็นจริงเพื่อผลลัพธ์ที่แม่นยำที่สุด
+        </p>
+
+        <button id="btn-start" class="btn-primary btn-large">เริ่มทำแบบประเมิน</button>
+
+        <div class="welcome-footer">
+          <p>ข้อมูลเพิ่มเติมการดูแลป้องกันภาวะสมองเสื่อม: <strong>www.azthai.org</strong></p>
+          <p>ติดต่อกรณีเจ็บป่วยฉุกเฉิน: <strong>1669</strong></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== หน้าคำถาม (ใช้ template เดียวกันทุกส่วน) ========== -->
+    <section id="screen-question" class="screen" data-screen="question" hidden>
+      <div class="question-card">
+        <p class="q-index" id="q-index">ข้อ 1 จาก 14</p>
+
+        <div class="q-body">
+          <h2 id="q-text">คำถาม</h2>
+          <button class="btn-speak btn-speak-small" id="btn-speak-question" aria-label="ฟังคำถามนี้">🔊</button>
+        </div>
+
+        <p class="q-hint" id="q-hint" hidden></p>
+
+        <div id="q-answer-area" class="answer-area">
+          <!-- ตัวเลือกคำตอบ ถูกสร้างด้วย JS ตามประเภทคำถาม -->
+        </div>
+      </div>
+
+      <nav class="nav-footer">
+        <button id="btn-prev" class="btn-secondary" aria-label="ก่อนหน้า">
+          <span class="btn-icon" aria-hidden="true">←</span>
+          <span class="btn-label">ก่อนหน้า</span>
+        </button>
+        <span id="skip-warning" class="skip-warning" hidden>ข้อที่ไม่ตอบจะนับเป็น 0 คะแนน</span>
+        <button id="btn-next" class="btn-primary" aria-label="ถัดไป">
+          <span class="btn-label">ถัดไป</span>
+          <span class="btn-icon" aria-hidden="true">→</span>
+        </button>
+      </nav>
+    </section>
+
+    <!-- ========== หน้าผลลัพธ์ ========== -->
+    <section id="screen-result" class="screen" data-screen="result" hidden>
+      <div class="result-card">
+        <svg id="marigold-ring-full" viewBox="0 0 200 200" width="160" height="160" aria-hidden="true"></svg>
+
+        <p class="result-score"><span id="result-score-number">0</span> / 97 คะแนน</p>
+        <p class="result-level" id="result-level">กำลังประมวลผล...</p>
+        <p class="result-message" id="result-message"></p>
+
+        <div class="result-feedback" id="result-feedback">
+          <!-- การ์ดคำแนะนำ personalized ถูกสร้างด้วย JS -->
+        </div>
+
+        <div class="result-actions">
+          <button id="btn-restart" class="btn-primary btn-large">ทำแบบประเมินอีกครั้ง</button>
+          <a class="btn-secondary btn-large" href="https://www.azthai.org" target="_blank" rel="noopener">ข้อมูลเพิ่มเติม</a>
+        </div>
+
+        <p class="emergency-note">หากมีเหตุฉุกเฉิน โปรดโทร <strong>1669</strong></p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <p>DemenScan · ไม่เก็บชื่อ นามสกุล หรือข้อมูลระบุตัวตนใด ๆ</p>
+  </footer>
+
+  <script src="sections/shared-data.js"></script>
+  <script src="sections/section1.js"></script>
+  <script src="sections/section2.js"></script>
+  <script src="sections/section3.js"></script>
+  <script src="sections/section4.js"></script>
+  <script src="sections/section5.js"></script>
+  <script src="sections/section6.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
