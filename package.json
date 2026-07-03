@@ -1,18 +1,11 @@
 {
-  "name": "demenscan-server",
+  "name": "demenscan",
   "version": "1.0.0",
   "private": true,
-  "description": "DemenScan backend: เสิร์ฟหน้าเว็บ + proxy ElevenLabs AI TTS",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js",
-    "dev": "node --watch index.js"
-  },
+  "description": "DemenScan frontend (no backend)",
+  "scripts": {},
   "engines": {
     "node": ">=18"
   },
-  "dependencies": {
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2"
-  }
+  "dependencies": {}
 }

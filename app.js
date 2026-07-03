@@ -92,59 +92,31 @@ function cycleFontSize(dir) {
 }
 
 /* ---------------------------------------------------------
-   4) Text To Speech
+   4) Text To Speech (No backend)
    --------------------------------------------------------- */
 
-// Keep the ElevenLabs API key on the backend. The browser only calls this proxy.
-const TTS_ENDPOINT = '/api/tts';
-
-const ttsCache = new Map(); // text -> loaded audio object URL
-let currentAudio = null;
-
-async function speak(text, btnEl) {
+// Backend removed: use browser Web Speech API only.
+function speak(text, btnEl) {
   const cleanText = String(text ?? '').trim();
   if (!cleanText) return;
+  if (!('speechSynthesis' in window)) return;
 
-  // Stop the current audio before playing the next prompt.
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.currentTime = 0;
-    currentAudio = null;
+  // Cancel any ongoing speech and start new utterance.
+  try {
+    window.speechSynthesis.cancel();
+  } catch (e) {
+    // ignore
   }
 
   const originalLabel = btnEl ? btnEl.innerHTML : null;
   setSpeakButtonLoading(btnEl, true);
 
-  try {
-    let audioUrl = ttsCache.get(cleanText);
-
-    if (!audioUrl) {
-      const res = await fetch(TTS_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: cleanText }),
-      });
-
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error || `TTS server error: ${res.status}`);
-      }
-
-      const blob = await res.blob();
-      audioUrl = URL.createObjectURL(blob);
-      ttsCache.set(cleanText, audioUrl);
-    }
-
-    const audio = new Audio(audioUrl);
-    currentAudio = audio;
-    audio.addEventListener('ended', () => { currentAudio = null; });
-    setSpeakButtonLoading(btnEl, false, originalLabel);
-    await audio.play();
-  } catch (err) {
-    console.error('AI TTS (ElevenLabs) ล้มเหลว, ใช้ Web Speech API สำรองแทน:', err);
-    setSpeakButtonLoading(btnEl, false, originalLabel);
-    speakFallback(cleanText);
-  }
+  const utter = new SpeechSynthesisUtterance(cleanText);
+  utter.lang = 'th-TH';
+  utter.rate = 0.95;
+  utter.onend = () => setSpeakButtonLoading(btnEl, false, originalLabel);
+  utter.onerror = () => setSpeakButtonLoading(btnEl, false, originalLabel);
+  window.speechSynthesis.speak(utter);
 }
 
 function setSpeakButtonLoading(btnEl, isLoading, restoreLabel) {
