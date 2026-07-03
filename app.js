@@ -130,8 +130,7 @@ function setSpeakButtonLoading(btnEl, isLoading, restoreLabel) {
   }
 }
 
-// สำรอง: Web Speech API ของเบราว์เซอร์ ใช้เฉพาะตอนเรียก AI TTS ไม่สำเร็จ
-// (เช่น backend ล่ม, ไม่มีอินเทอร์เน็ต, โควตา ElevenLabs หมด)
+// สำรอง: Web Speech API ของเบราว์เซอร์ เป็น fallback สำหรับการเล่นเสียง
 function speakFallback(text) {
   if (!('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
