@@ -275,25 +275,176 @@ button { font-family: var(--font-body); cursor: pointer; }
 .screen[hidden] { display: none; }
 
 /* ---------- Welcome ---------- */
-.welcome-card {
-  background: var(--card-bg);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: 1.6rem 1.35rem;
-  text-align: center;
-  margin-top: 1rem;
+.welcome-screen {
+  width: 100vw;
+  min-height: calc(100svh - 3.6rem);
+  margin: -1rem calc(50% - 50vw) -5.8rem;
+  padding: clamp(1rem, 3vw, 2.3rem) clamp(1rem, 4vw, 4rem) 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: clamp(1rem, 3vh, 2rem);
+  background:
+    radial-gradient(circle at 82% 18%, rgba(232, 169, 111, 0.34), transparent 26rem),
+    linear-gradient(135deg, #FDFBF7 0%, #F3E9D8 54%, #DCE7DF 100%);
+  overflow: hidden;
 }
-.welcome-emblem { font-size: 3rem; }
-.welcome-card h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-.lead { font-size: 1.1rem; color: var(--ink); margin: 0.5rem 0; }
-.muted { color: var(--ink-soft); font-size: 0.95rem; }
-
-.welcome-footer {
-  margin-top: 2rem;
-  padding-top: 1rem;
-  border-top: 1px dashed var(--border-soft);
-  font-size: 0.85rem;
+.welcome-hero {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  min-height: min(58svh, 32rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(18rem, 0.72fr);
+  align-items: center;
+  gap: clamp(1.2rem, 5vw, 4rem);
+}
+.welcome-copy {
+  max-width: 42rem;
+  animation: question-enter 0.32s ease both;
+}
+.welcome-kicker {
+  margin: 0 0 0.75rem;
+  color: var(--marigold);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.welcome-copy h1 {
+  font-size: clamp(3rem, 10vw, 6.5rem);
+  line-height: 0.92;
+  letter-spacing: 0;
+}
+.welcome-lead {
+  max-width: 38rem;
+  margin: 1rem 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.28rem, 2.4vw, 2rem);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--forest);
+}
+.welcome-support {
+  max-width: 35rem;
+  margin: 0.85rem 0 0;
   color: var(--ink-soft);
+  font-size: clamp(1rem, 1.4vw, 1.15rem);
+}
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+.welcome-actions .btn-large {
+  width: auto;
+  min-width: min(100%, 15rem);
+  margin-top: 0;
+  padding-inline: 1.5rem;
+}
+.welcome-speak {
+  margin: 0;
+  min-height: 3rem;
+  background: #FFFFFF;
+  color: var(--action-audio);
+}
+.welcome-speak:hover {
+  background: #FFF7EF;
+}
+.welcome-visual {
+  position: relative;
+  min-height: 22rem;
+  display: grid;
+  place-items: center;
+  animation: answer-enter 0.38s ease 80ms both;
+}
+.welcome-image-frame {
+  width: min(25rem, 78vw);
+  aspect-ratio: 16 / 10;
+  margin: 0;
+  border-radius: 24px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(11, 37, 69, 0.14);
+  box-shadow: 0 22px 60px rgba(11, 37, 69, 0.13);
+}
+.welcome-hero-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+.welcome-image-placeholder {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.35rem;
+  padding: 1.4rem;
+  text-align: center;
+  color: var(--forest);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.72), rgba(239,231,215,0.72)),
+    repeating-linear-gradient(135deg, rgba(11,37,69,0.06) 0 1px, transparent 1px 14px);
+}
+.welcome-image-placeholder span {
+  font-size: 3.5rem;
+  line-height: 1;
+}
+.welcome-image-placeholder strong {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+.welcome-image-placeholder small {
+  max-width: 14rem;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.welcome-info {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid rgba(11, 37, 69, 0.14);
+  border-bottom: 1px solid rgba(11, 37, 69, 0.14);
+  animation: answer-enter 0.34s ease 120ms both;
+}
+.welcome-info-item {
+  padding: 1rem clamp(0.85rem, 2vw, 1.25rem);
+}
+.welcome-info-item + .welcome-info-item {
+  border-left: 1px solid rgba(11, 37, 69, 0.14);
+}
+.welcome-info-icon {
+  display: inline-flex;
+  margin-bottom: 0.35rem;
+  color: var(--marigold);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+.welcome-info-item h2 {
+  font-size: 1.06rem;
+  margin-bottom: 0.25rem;
+}
+.welcome-info-item p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.welcome-footer {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+}
+.welcome-footer p {
+  margin: 0;
 }
 
 /* ---------- Buttons ---------- */
@@ -776,6 +927,51 @@ html.font-xlarge { --base-size: 24px; }
   }
 }
 
+@media (max-width: 860px) {
+  .welcome-screen {
+    min-height: calc(100svh - 3.25rem);
+    justify-content: flex-start;
+    gap: 1.1rem;
+  }
+  .welcome-hero {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    padding-top: 0.5rem;
+  }
+  .welcome-copy {
+    max-width: none;
+  }
+  .welcome-visual {
+    min-height: 10.5rem;
+    order: 0;
+  }
+  .welcome-image-frame {
+    width: min(15rem, 78vw);
+    aspect-ratio: 16 / 10;
+    border-radius: 18px;
+  }
+  .welcome-image-placeholder {
+    padding: 1rem;
+  }
+  .welcome-image-placeholder span {
+    font-size: 2.3rem;
+  }
+  .welcome-image-placeholder strong {
+    font-size: 1rem;
+  }
+  .welcome-image-placeholder small {
+    font-size: 0.76rem;
+  }
+  .welcome-info {
+    grid-template-columns: 1fr;
+  }
+  .welcome-info-item + .welcome-info-item {
+    border-left: 0;
+    border-top: 1px solid rgba(11, 37, 69, 0.14);
+  }
+}
+
 @media (max-width: 640px) {
   .topbar {
     min-height: 3.25rem;
@@ -832,20 +1028,41 @@ html.font-xlarge { --base-size: 24px; }
   .app-shell {
     padding: 0.75rem 0.75rem 5.5rem;
   }
-  .welcome-card,
   .question-card,
   .result-card {
     border-radius: 16px;
     padding: 1.1rem 0.95rem;
     margin-top: 0.65rem;
   }
-  .welcome-emblem {
-    font-size: 2.4rem;
+  .welcome-screen {
+    margin-top: -0.75rem;
+    padding: 0.9rem 0.85rem 1.25rem;
   }
-  .welcome-card h1 {
-    font-size: 1.65rem;
+  .welcome-copy h1 {
+    font-size: clamp(2.5rem, 15vw, 3.5rem);
   }
-  .lead,
+  .welcome-lead {
+    font-size: 1.08rem;
+  }
+  .welcome-support {
+    font-size: 0.94rem;
+  }
+  .welcome-actions {
+    gap: 0.6rem;
+  }
+  .welcome-actions .btn-large,
+  .welcome-speak {
+    width: 100%;
+  }
+  .welcome-info-item {
+    padding: 0.85rem 0.2rem;
+  }
+  .welcome-footer {
+    font-size: 0.78rem;
+  }
+  .welcome-footer p {
+    width: 100%;
+  }
   .q-hint,
   .result-message {
     font-size: 0.94rem;

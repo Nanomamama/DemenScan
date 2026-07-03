@@ -12,7 +12,7 @@
 
   <!-- แถบเครื่องมือบนสุด: ปรับขนาดตัวอักษร -->
   <header class="topbar">
-    <div class="brand">🌼 <span>DemenScan</span></div>
+    <div class="brand"><span>DemenScan</span></div>
     <div class="text-size-controls" role="group" aria-label="ปรับขนาดตัวอักษร">
       <button id="font-smaller" class="btn-chip" aria-label="ลดขนาดตัวอักษร">ก−</button>
       <button id="font-larger" class="btn-chip" aria-label="เพิ่มขนาดตัวอักษร">ก+</button>
@@ -37,27 +37,60 @@
   <main id="app" class="app-shell">
 
     <!-- ========== หน้า 0: WELCOME ========== -->
-    <section id="screen-welcome" class="screen" data-screen="welcome">
-      <div class="welcome-card">
-        <div class="welcome-emblem" aria-hidden="true">🌼</div>
-        <h1>DemenScan</h1>
-        <p class="lead">แบบสำรวจและประเมินประสิทธิภาพการทำงานของสมองด้วยตนเอง สำหรับผู้สูงวัย</p>
-        <p class="muted">ใช้เวลาประมาณ 20–30 นาที ตอบตามความเป็นจริง ไม่มีคำตอบผิดหรือถูกในการใช้ชีวิต</p>
+    <section id="screen-welcome" class="screen welcome-screen" data-screen="welcome">
+      <div class="welcome-hero">
+        <div class="welcome-copy">
+          <p class="welcome-kicker">แบบประเมินเบื้องต้นสำหรับผู้สูงวัยและผู้ดูแล</p>
+          <h1>DemenScan</h1>
+          <p class="welcome-lead">สังเกตความเปลี่ยนแปลงด้านความจำ การคิด และพฤติกรรมสุขภาพได้ตั้งแต่เนิ่น ๆ</p>
+          <p class="welcome-support">ผลลัพธ์ช่วยให้เห็นภาพรวมความเสี่ยง พร้อมคำแนะนำที่นำไปใช้วางแผนดูแลตัวเองหรือพูดคุยกับผู้เชี่ยวชาญได้ง่ายขึ้น</p>
 
-        <button class="btn-speak" data-speak-target="welcome-intro" aria-label="ฟังคำอธิบาย">
-          🔊 ฟังคำอธิบาย
-        </button>
-        <p id="welcome-intro" class="sr-only-text">
-          ยินดีต้อนรับสู่ดีเมนสแกน แบบประเมินสมองด้วยตนเองสำหรับผู้สูงวัย ท่านสามารถกดฟังเสียงคำถามได้ทุกข้อ
-          ข้อมูลของท่านจะไม่มีการระบุชื่อหรือที่อยู่ ขอให้ท่านตอบตามความเป็นจริงเพื่อผลลัพธ์ที่แม่นยำที่สุด
-        </p>
-
-        <button id="btn-start" class="btn-primary btn-large">เริ่มทำแบบประเมิน</button>
-
-        <div class="welcome-footer">
-          <p>ข้อมูลเพิ่มเติมการดูแลป้องกันภาวะสมองเสื่อม: <strong>www.azthai.org</strong></p>
-          <p>ติดต่อกรณีเจ็บป่วยฉุกเฉิน: <strong>1669</strong></p>
+          <div class="welcome-actions">
+            <button id="btn-start" class="btn-primary btn-large">เริ่มทำแบบประเมิน</button>
+            <button class="btn-speak welcome-speak" data-speak-target="welcome-intro" aria-label="ฟังคำอธิบาย">
+              🔊 ฟังคำอธิบาย
+            </button>
+          </div>
+          <p id="welcome-intro" class="sr-only-text">
+            ยินดีต้อนรับสู่ดีเมนสแกน แบบประเมินเบื้องต้นสำหรับสังเกตความจำ สมาธิ การคิด และพฤติกรรมสุขภาพ
+            การประเมินนี้ช่วยให้เห็นความเสี่ยงและจุดที่ควรดูแลเพิ่มเติม ใช้เวลาประมาณยี่สิบถึงสามสิบนาที
+            ขอให้ทำในที่เงียบและตอบตามความเป็นจริง ผลลัพธ์เป็นการคัดกรองเบื้องต้น ไม่ใช่การวินิจฉัยแทนแพทย์
+          </p>
         </div>
+
+        <div class="welcome-visual">
+          <figure class="welcome-image-frame">
+            <img class="welcome-hero-image" src="image/พื้นหลัง.png" alt="ภาพประกอบ DemenScan">
+            <figcaption class="welcome-image-placeholder" hidden>
+              <span aria-hidden="true">🌼</span>
+              <strong>พื้นที่สำหรับใส่รูปภาพ</strong>
+              <small>วางไฟล์รูปในโปรเจกต์ แล้วใส่ path ที่ src ของรูปนี้</small>
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <div class="welcome-info">
+        <section class="welcome-info-item">
+          <span class="welcome-info-icon" aria-hidden="true">01</span>
+          <h2>ทำไมควรประเมิน</h2>
+          <p>การสังเกตเร็วช่วยให้ปรับพฤติกรรม วางแผนดูแล และตัดสินใจปรึกษาผู้เชี่ยวชาญได้ทันเวลา</p>
+        </section>
+        <section class="welcome-info-item">
+          <span class="welcome-info-icon" aria-hidden="true">02</span>
+          <h2>ช่วยอะไรได้</h2>
+          <p>สรุปภาพรวมด้านความจำ การคิด และปัจจัยสุขภาพ พร้อมคำแนะนำเฉพาะบุคคลหลังทำเสร็จ</p>
+        </section>
+        <section class="welcome-info-item">
+          <span class="welcome-info-icon" aria-hidden="true">03</span>
+          <h2>ก่อนเริ่ม</h2>
+          <p>ใช้เวลาประมาณ 20-30 นาที ควรทำในที่เงียบ และผลลัพธ์เป็นการคัดกรองเบื้องต้น ไม่ใช่คำวินิจฉัย</p>
+        </section>
+      </div>
+
+      <div class="welcome-footer">
+        <p>ข้อมูลเพิ่มเติมการดูแลป้องกันภาวะสมองเสื่อม: <strong>www.azthai.org</strong></p>
+        <p>กรณีเจ็บป่วยฉุกเฉิน โปรดโทร <strong>1669</strong></p>
       </div>
     </section>
 
