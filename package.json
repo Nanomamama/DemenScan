@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "description": "DemenScan frontend (no backend)",
-  "scripts": {},
+  "scripts": {
+    "start": "serve -s . -l $PORT"
+  },
   "engines": {
     "node": ">=18"
   },
-  "dependencies": {}
+  "dependencies": {
+    "serve": "^14.1.2"
+  }
 }
