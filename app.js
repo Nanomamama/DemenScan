@@ -45,6 +45,7 @@ const state = {
   sectionIdx: 0,          // 0..5
   questionIdx: 0,         // index within section.questions
   answers: {},            // questionId -> raw value
+  resultPopupShown: false,
 };
 
 function flatIndex() {
@@ -69,6 +70,7 @@ document.getElementById('btn-start').addEventListener('click', () => {
   state.screen = 'question';
   state.sectionIdx = 0;
   state.questionIdx = 0;
+  state.resultPopupShown = false;
   render();
 });
 document.getElementById('btn-prev').addEventListener('click', goPrev);
@@ -78,6 +80,7 @@ document.getElementById('btn-restart').addEventListener('click', () => {
   state.sectionIdx = 0;
   state.questionIdx = 0;
   state.answers = {};
+  state.resultPopupShown = false;
   render();
 });
 
@@ -166,6 +169,7 @@ function goNext() {
     state.questionIdx = 0;
   } else {
     state.screen = 'result';
+    state.resultPopupShown = false;
   }
   render();
 }
@@ -338,6 +342,9 @@ function buildAnswerControl(q) {
       makeChoiceButtons(q.options);
       break;
     case 'multi-choice-exact':
+      makeMultiChoiceButtons(q.options);
+      break;
+    case 'multi-choice-info':
       makeMultiChoiceButtons(q.options);
       break;
     case 'likert5':
@@ -720,10 +727,38 @@ function computeCognitiveScore() {
   return { total, bySection };
 }
 
+const RISK_PROFILES = {
+  low: {
+    label: 'ความเสี่ยงต่ำ (Low Risk)',
+    range: '78 - 97 คะแนน',
+    status: 'การทำงานของสมองอยู่ในเกณฑ์ดีเยี่ยม',
+    recommendation: 'ให้รักษาพฤติกรรมสุขภาพปัจจุบันไว้',
+  },
+  moderate: {
+    label: 'ความเสี่ยงปานกลาง / เฝ้าระวัง (Moderate Risk)',
+    range: '59 - 77 คะแนน',
+    status: 'การทำงานของสมองเริ่มมีสัญญาณถดถอยเล็กน้อย แต่ยังไม่เข้าเกณฑ์อันตราย',
+    recommendation: 'ควรปรับเปลี่ยนพฤติกรรมการใช้ชีวิตและเริ่มฝึกบริหารสมองอย่างจริงจัง',
+  },
+  high: {
+    label: 'ความเสี่ยงสูง (High Risk)',
+    range: '58 คะแนน หรือน้อยกว่า',
+    status: 'มีความเสี่ยงสูงที่จะเกิดภาวะสมองเสื่อม (ตามเกณฑ์ Cut-off ≤ 58)',
+    recommendation: 'ควรนำผลการประเมินนี้ไปปรึกษาแพทย์เฉพาะทางด้านระบบประสาทหรืออายุรกรรมผู้สูงอายุเพื่อรับการตรวจวินิจฉัยเชิงลึก',
+  },
+};
+
 function riskLevel(score) {
-  if (score >= 78) return 'low';
+  if (score >= 78 && score <= 97) return 'low';
   if (score >= 59) return 'moderate';
   return 'high';
+}
+
+function maxScoreForSection(sectionId) {
+  const section = SECTIONS.find(s => s.id === sectionId);
+  if (!section) return 0;
+  if (Number.isFinite(section.maxPoints)) return section.maxPoints;
+  return section.questions.length;
 }
 
 /* ---------------------------------------------------------
@@ -747,30 +782,50 @@ function buildFeedbackCards(level) {
   if (hrs !== null && hrs < 7) {
     cards.push({
       title: '💤 การนอนหลับ',
-      body: 'การนอนหลับน้อยกว่า 7 ชั่วโมง เพิ่มความเสี่ยงสมองเสื่อมได้ถึง 44% เทียบกับคนที่นอนเพียงพอ ลองใช้ฟีเจอร์ "Bedtime" หรือเสียงธรรมชาติในสมาร์ทโฟนช่วยผ่อนคลายก่อนนอน และเปิดโหมด "ห้ามรบกวน" ตอนกลางคืน',
+      knowledge: 'การนอนหลับน้อยกว่า 7 ชั่วโมง เพิ่มความเสี่ยงสมองเสื่อมได้ถึง 44% เมื่อเทียบกับคนที่นอนเพียงพอ',
+      literacy: 'แนะนำให้ใช้ฟีเจอร์ "Bedtime" หรือแอปพลิเคชันเสียงธรรมชาติ (White Noise) ในสมาร์ทโฟนเพื่อช่วยให้ผ่อนคลายก่อนนอน และตั้งโหมด "ห้ามรบกวน (Do Not Disturb)" ในเวลากลางคืน',
     });
   }
   const activity = state.answers['s1q8'];
-  if (activity === 'ดูทีวี' || activity === 'เล่นมือถือ') {
+  const exercise = state.answers['s1q15'];
+  if (activity === 'ดูทีวี' || activity === 'เล่นมือถือ' ||
+      exercise === 'ไม่ได้ออกกำลังกาย' || exercise === '1 วัน/สัปดาห์') {
     cards.push({
       title: '🚶 การเคลื่อนไหวร่างกาย',
-      body: 'การเพิ่มการขยับร่างกายเพียง 1 วัน/สัปดาห์ ช่วยลดความเสี่ยงสมองเสื่อมได้ถึง 26% ลองใช้แอปนับก้าวเดิน หรือค้นหาคลิป "บริหารร่างกายสำหรับผู้สูงวัย" ใน YouTube เพื่อทำตามที่บ้าน',
+      knowledge: 'การเพิ่มการขยับร่างกายหรือออกกำลังกายเพียง 1 วัน/สัปดาห์ ช่วยลดความเสี่ยงสมองเสื่อมได้ถึง 26%',
+      literacy: 'แนะนำให้ใช้แอปนับก้าวเดิน (Pedometer) ที่มีอยู่ในเครื่อง หรือเปิด YouTube เพื่อค้นหาคลิป "เต้นบาสโลบ" หรือ "บริหารร่างกายสำหรับผู้สูงวัย" เพื่อทำตามที่บ้าน',
+    });
+  }
+  const diseases = Array.isArray(state.answers['s1q16']) ? state.answers['s1q16'] : [];
+  if (diseases.includes('เบาหวาน') || diseases.includes('ความดันโลหิตสูง')) {
+    cards.push({
+      title: '🩺 โรคประจำตัว',
+      knowledge: 'โรคความดันโลหิตสูงและเบาหวานที่ไม่ควบคุม จะเร่งให้หลอดเลือดสมองเสื่อมสภาพเร็วขึ้น 2-3 เท่า',
+      literacy: 'สอนการใช้แอปพลิเคชันสำหรับบันทึกค่าน้ำตาลและค่าความดัน (Health tracking apps) หรือตั้งนาฬิกาปลุกในมือถือเพื่อเตือนการรับประทานยาให้ตรงเวลา',
     });
   }
   const alcohol = state.answers['s1q14'];
   if (alcohol === 'ดื่มประจำ' || alcohol === 'ดื่มเฉพาะงานสังคม') {
     cards.push({
       title: '🍶 พฤติกรรมการดื่มแอลกอฮอล์',
-      body: 'การดื่มแอลกอฮอล์เพิ่มความเสี่ยงสมองเสื่อมได้ถึง 89% ลองฟังพอดแคสต์ให้ความรู้เรื่องการเลิกเหล้าจากกรมอนามัย หรือแอด LINE Official Account สายด่วนเลิกสุราเพื่อรับคำปรึกษา',
+      knowledge: 'การดื่มแอลกอฮอล์เพิ่มความเสี่ยงสมองเสื่อมถึง 89%',
+      literacy: 'แนะนำสื่อออนไลน์หรือพอดแคสต์ (Podcast) ของกรมอนามัยที่ให้ความรู้เรื่องการเลิกเหล้า และช่องทางการแอด LINE Official Account ของสายด่วนเลิกสุราเพื่อรับคำปรึกษา',
     });
   }
-  // TODO(dev): เพิ่มคำถามโรคประจำตัว (เบาหวาน/ความดัน) ในส่วนที่ 1 หากต้องการการ์ดนี้
 
   if (level === 'high') {
     cards.push({
       title: '👪 สำหรับญาติผู้ดูแล',
-      body: 'แนะนำให้ติดตั้งแอปติดตามตำแหน่ง (เช่น การแชร์ตำแหน่งใน Google Maps) ในมือถือของผู้สูงอายุเพื่อป้องกันการพลัดหลง และตั้งค่า "Emergency Contact" ไว้ในหน้าจอโทรศัพท์ พร้อมทั้งนำผลประเมินนี้ไปปรึกษาแพทย์เฉพาะทางระบบประสาทหรืออายุรกรรมผู้สูงอายุ',
+      knowledge: RISK_PROFILES.high.status,
+      literacy: 'แนะนำให้ติดตั้งแอปติดตามตำแหน่ง เช่น การแชร์ตำแหน่งใน Google Maps ตั้งค่า "Emergency Contact" และนำผลประเมินนี้ไปปรึกษาแพทย์เฉพาะทางระบบประสาทหรืออายุรกรรมผู้สูงอายุ',
       urgent: true,
+    });
+  }
+  if (!cards.length) {
+    cards.push({
+      title: '🌿 การดูแลต่อเนื่อง',
+      knowledge: 'ยังไม่พบปัจจัยเสี่ยงเด่นจากข้อมูลทั่วไปที่ตอบไว้',
+      literacy: 'สามารถใช้ปฏิทินหรือแอปเตือนความจำในมือถือเพื่อวางแผนนอน ออกกำลังกาย ตรวจสุขภาพ และทบทวนกิจกรรมฝึกสมองเป็นประจำ',
     });
   }
   return cards;
@@ -780,34 +835,97 @@ function buildFeedbackCards(level) {
    9) RESULT SCREEN
    --------------------------------------------------------- */
 function renderResult() {
-  const { total } = computeCognitiveScore();
+  const { total, bySection } = computeCognitiveScore();
   const level = riskLevel(total);
+  const profile = RISK_PROFILES[level];
 
   document.getElementById('result-score-number').textContent = total;
 
   const levelEl = document.getElementById('result-level');
   levelEl.className = `result-level ${level}`;
-  levelEl.textContent = level === 'low' ? 'ความเสี่ยงต่ำ'
-    : level === 'moderate' ? 'ความเสี่ยงปานกลาง / เฝ้าระวัง'
-    : 'ความเสี่ยงสูง';
-
-  const messages = {
-    low: 'เยี่ยมมากค่ะ/ครับ! การทำงานของสมองของท่านอยู่ในเกณฑ์ดีเยี่ยม รักษาพฤติกรรมสุขภาพดี ๆ แบบนี้ไว้นะคะ/ครับ',
-    moderate: 'ทำได้ดีที่ทำแบบประเมินจนจบ ผลของท่านเริ่มมีสัญญาณถดถอยเล็กน้อย ลองปรับพฤติกรรมและฝึกบริหารสมองอย่างจริงจังดูนะคะ/ครับ',
-    high: 'ขอบคุณที่ตั้งใจทำแบบประเมินจนจบนะคะ/ครับ ผลลัพธ์นี้ชี้ว่าควรปรึกษาแพทย์เพื่อตรวจวินิจฉัยเพิ่มเติม การพบแพทย์แต่เนิ่น ๆ ช่วยดูแลสุขภาพสมองได้ดีที่สุด',
-  };
-  document.getElementById('result-message').textContent = messages[level];
+  levelEl.textContent = profile.label;
+  document.getElementById('result-message').textContent =
+    `ช่วงคะแนน: ${profile.range} | สถานะ: ${profile.status} | คำแนะนำ: ${profile.recommendation}`;
 
   const feedbackWrap = document.getElementById('result-feedback');
   feedbackWrap.innerHTML = '';
-  buildFeedbackCards(level).forEach(card => {
+  const sectionScores = document.createElement('div');
+  sectionScores.className = 'section-score-list';
+  [4, 5, 6].forEach(sectionId => {
+    const section = SECTIONS.find(s => s.id === sectionId);
+    const item = document.createElement('div');
+    item.className = 'section-score-item';
+    item.innerHTML = `
+      <span>ส่วนที่ ${sectionId}: ${section.title}</span>
+      <strong>${bySection[sectionId] ?? 0} / ${maxScoreForSection(sectionId)} คะแนน</strong>
+    `;
+    sectionScores.appendChild(item);
+  });
+  feedbackWrap.appendChild(sectionScores);
+
+  const feedbackCards = buildFeedbackCards(level);
+  const popupBtn = document.createElement('button');
+  popupBtn.type = 'button';
+  popupBtn.className = 'btn-secondary btn-large';
+  popupBtn.textContent = 'ดูคำแนะนำ Digital Literacy เฉพาะบุคคล';
+  popupBtn.addEventListener('click', () => openFeedbackModal(feedbackCards));
+  feedbackWrap.appendChild(popupBtn);
+
+  feedbackCards.forEach(card => {
     const div = document.createElement('div');
     div.className = 'feedback-card' + (card.urgent ? ' urgent' : '');
-    div.innerHTML = `<h3>${card.title}</h3><p>${card.body}</p>`;
+    div.innerHTML = `<h3>${card.title}</h3><p><strong>ความรู้:</strong> ${card.knowledge}</p><p><strong>Digital Literacy:</strong> ${card.literacy}</p>`;
     feedbackWrap.appendChild(div);
   });
 
+  if (!state.resultPopupShown) {
+    state.resultPopupShown = true;
+    setTimeout(() => openFeedbackModal(feedbackCards), 250);
+  }
+
   renderMarigoldRing(document.getElementById('marigold-ring-full'), 6, 6, level);
+}
+
+function openFeedbackModal(cards) {
+  const existing = document.getElementById('feedback-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'feedback-modal';
+  modal.className = 'feedback-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'feedback-modal-title');
+  modal.innerHTML = `
+    <div class="feedback-modal-backdrop" data-close-feedback></div>
+    <div class="feedback-modal-panel">
+      <div class="feedback-modal-header">
+        <h2 id="feedback-modal-title">คำแนะนำ Digital Literacy เฉพาะบุคคล</h2>
+        <button type="button" class="feedback-modal-close" data-close-feedback aria-label="ปิดคำแนะนำ">×</button>
+      </div>
+      <div class="feedback-modal-body">
+        ${cards.map(card => `
+          <section class="feedback-modal-item${card.urgent ? ' urgent' : ''}">
+            <h3>${card.title}</h3>
+            <p><strong>ความรู้:</strong> ${card.knowledge}</p>
+            <p><strong>Digital Literacy:</strong> ${card.literacy}</p>
+          </section>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  modal.querySelectorAll('[data-close-feedback]').forEach(btn => {
+    btn.addEventListener('click', () => modal.remove());
+  });
+  document.addEventListener('keydown', function handleEsc(event) {
+    if (event.key === 'Escape' && document.getElementById('feedback-modal')) {
+      modal.remove();
+      document.removeEventListener('keydown', handleEsc);
+    }
+  });
+  document.body.appendChild(modal);
+  modal.querySelector('.feedback-modal-close').focus();
 }
 
 /* ---------------------------------------------------------
