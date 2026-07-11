@@ -46,6 +46,10 @@ const state = {
   questionIdx: 0,         // index within section.questions
   answers: {},            // questionId -> raw value
   resultPopupShown: false,
+  submissionSent: false,
+  submissionStatus: 'idle',
+  submissionCode: '',
+  submissionError: '',
 };
 
 function flatIndex() {
@@ -67,12 +71,21 @@ const progressWrap = document.getElementById('progress-wrap');
 const sectionTabs = document.getElementById('section-tabs');
 const questionCard = screenQuestion.querySelector('.question-card');
 let lastRenderedQuestionKey = '';
+const delayedRecallRevealed = {};
+const delayedRecallTimers = {};
 
 document.getElementById('btn-start').addEventListener('click', () => {
   state.screen = 'question';
   state.sectionIdx = 0;
   state.questionIdx = 0;
+  Object.keys(delayedRecallRevealed).forEach(key => delete delayedRecallRevealed[key]);
+  Object.values(delayedRecallTimers).forEach(timer => clearTimeout(timer));
+  Object.keys(delayedRecallTimers).forEach(key => delete delayedRecallTimers[key]);
   state.resultPopupShown = false;
+  state.submissionSent = false;
+  state.submissionStatus = 'idle';
+  state.submissionCode = '';
+  state.submissionError = '';
   render();
 });
 document.getElementById('btn-prev').addEventListener('click', goPrev);
@@ -82,7 +95,14 @@ document.getElementById('btn-restart').addEventListener('click', () => {
   state.sectionIdx = 0;
   state.questionIdx = 0;
   state.answers = {};
+  Object.keys(delayedRecallRevealed).forEach(key => delete delayedRecallRevealed[key]);
+  Object.values(delayedRecallTimers).forEach(timer => clearTimeout(timer));
+  Object.keys(delayedRecallTimers).forEach(key => delete delayedRecallTimers[key]);
   state.resultPopupShown = false;
+  state.submissionSent = false;
+  state.submissionStatus = 'idle';
+  state.submissionCode = '';
+  state.submissionError = '';
   render();
 });
 
@@ -163,7 +183,12 @@ document.querySelectorAll('.btn-speak[data-speak-target]').forEach(btn => {
 });
 document.getElementById('btn-speak-question').addEventListener('click', (e) => {
   const q = currentQuestion();
-  if (q) speak(q.text + (q.options ? '. ตัวเลือก: ' + (q.options.join(', ')) : ''), e.currentTarget);
+  if (!q) return;
+  if (isWaitingForDelayedRecall(q)) {
+    speak('จำชุดคำศัพท์นี้: ' + (Array.isArray(q.words) ? q.words.join(', ') : ''), e.currentTarget);
+    return;
+  }
+  speak(q.text + (q.options ? '. ตัวเลือก: ' + (q.options.join(', ')) : ''), e.currentTarget);
 });
 
 /* ---------------------------------------------------------
@@ -231,7 +256,14 @@ function renderQuestion() {
   const area = document.getElementById('q-answer-area');
   area.classList.toggle('answers-static', isSameQuestion);
   area.innerHTML = '';
-  area.appendChild(buildAnswerControl(q));
+  if (q.image) area.appendChild(buildQuestionImage(q.image));
+  const waitingForRecall = isWaitingForDelayedRecall(q);
+  if (waitingForRecall) {
+    area.appendChild(buildDelayedRecallPrompt(q));
+    startDelayedRecallTimer(q, questionKey);
+  } else {
+    area.appendChild(buildAnswerControl(q));
+  }
   animateQuestionCard(questionKey);
 
   document.getElementById('btn-prev').disabled = false;
@@ -242,9 +274,161 @@ function renderQuestion() {
   nextBtn.innerHTML = isLastQuestion
     ? '<span class="btn-label">ดูผลลัพธ์</span><span class="btn-icon" aria-hidden="true">✓</span>'
     : '<span class="btn-label">ถัดไป</span><span class="btn-icon" aria-hidden="true">→</span>';
+  nextBtn.disabled = waitingForRecall;
 
-  document.getElementById('skip-warning').hidden = isAnswered(q);
+  document.getElementById('skip-warning').hidden = waitingForRecall || isAnswered(q);
   renderSectionTabs();
+}
+
+function isWaitingForDelayedRecall(q) {
+  return q.type === 'delayed-recall-choice' && !delayedRecallRevealed[q.id];
+}
+
+function startDelayedRecallTimer(q, questionKey) {
+  if (delayedRecallTimers[q.id]) return;
+  delayedRecallTimers[q.id] = setTimeout(() => {
+    delayedRecallRevealed[q.id] = true;
+    delete delayedRecallTimers[q.id];
+    const current = currentQuestion();
+    if (state.screen === 'question' && current && current.id === q.id) {
+      lastRenderedQuestionKey = '';
+      renderQuestion();
+    }
+  }, q.delayMs || 3000);
+}
+
+function buildDelayedRecallPrompt(q) {
+  const card = document.createElement('div');
+  card.className = 'delayed-recall-card';
+  addStagger(card, 0);
+
+  const label = document.createElement('p');
+  label.className = 'delayed-recall-label';
+  label.textContent = 'จำชุดคำศัพท์นี้';
+  card.appendChild(label);
+
+  const words = document.createElement('div');
+  words.className = 'delayed-recall-words';
+  words.textContent = Array.isArray(q.words) ? q.words.join(' - ') : '';
+  card.appendChild(words);
+
+  const countdown = document.createElement('p');
+  countdown.className = 'delayed-recall-countdown';
+  countdown.textContent = 'ระบบจะแสดงคำตอบให้เลือกหลังจาก 3 วินาที';
+  card.appendChild(countdown);
+
+  return card;
+}
+
+function buildQuestionImage(image) {
+  const figure = document.createElement('figure');
+  figure.className = 'question-image-slot';
+  const imageList = Array.isArray(image.images) ? image.images : null;
+
+  if (imageList && imageList.length) {
+    const gallery = document.createElement('div');
+    gallery.className = 'question-image-gallery';
+    imageList.forEach((item, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'question-image-thumb';
+      button.setAttribute('aria-label', `ซูมดูรูปภาพที่ ${index + 1}`);
+      addStagger(button, index);
+      const img = document.createElement('img');
+      img.src = item.src;
+      img.alt = item.alt || image.alt || '';
+      img.loading = 'lazy';
+      button.appendChild(img);
+      const zoom = document.createElement('span');
+      zoom.className = 'question-image-zoom-label';
+      zoom.textContent = 'ซูม';
+      button.appendChild(zoom);
+      button.addEventListener('click', () => openImageZoom(item.src, item.alt || image.alt || ''));
+      gallery.appendChild(button);
+    });
+    figure.appendChild(gallery);
+  } else if (image.src) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'question-image-single';
+    button.setAttribute('aria-label', 'ซูมดูรูปภาพ');
+    const img = document.createElement('img');
+    img.src = image.src;
+    img.alt = image.alt || '';
+    img.loading = 'lazy';
+    button.appendChild(img);
+    const zoom = document.createElement('span');
+    zoom.className = 'question-image-zoom-label';
+    zoom.textContent = 'ซูม';
+    button.appendChild(zoom);
+    button.addEventListener('click', () => openImageZoom(image.src, image.alt || ''));
+    figure.appendChild(button);
+  } else {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'question-image-placeholder';
+    placeholder.innerHTML = `
+      <span aria-hidden="true">+</span>
+      <strong>${image.placeholder || 'วางรูปภาพที่นี่'}</strong>
+      <small>ใส่ path รูปใน section5.js ที่ image.src</small>
+    `;
+    figure.appendChild(placeholder);
+  }
+
+  if (image.caption) {
+    const caption = document.createElement('figcaption');
+    caption.textContent = image.caption;
+    figure.appendChild(caption);
+  }
+
+  return figure;
+}
+
+function openImageZoom(src, alt) {
+  const existing = document.getElementById('image-zoom-modal');
+  if (existing) existing.remove();
+  const previousBodyOverflow = document.body.style.overflow;
+  document.body.style.overflow = 'hidden';
+
+  const modal = document.createElement('div');
+  modal.id = 'image-zoom-modal';
+  modal.className = 'image-zoom-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', 'ดูรูปภาพขนาดใหญ่');
+
+  const backdrop = document.createElement('button');
+  backdrop.type = 'button';
+  backdrop.className = 'image-zoom-backdrop';
+  backdrop.setAttribute('aria-label', 'ปิดรูปภาพขนาดใหญ่');
+  modal.appendChild(backdrop);
+
+  const panel = document.createElement('div');
+  panel.className = 'image-zoom-panel';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'image-zoom-close';
+  close.setAttribute('aria-label', 'ปิดรูปภาพขนาดใหญ่');
+  close.textContent = '×';
+  panel.appendChild(close);
+
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = alt;
+  panel.appendChild(img);
+  modal.appendChild(panel);
+
+  const closeModal = () => {
+    document.body.style.overflow = previousBodyOverflow;
+    modal.remove();
+  };
+  backdrop.addEventListener('click', closeModal);
+  close.addEventListener('click', closeModal);
+  modal.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeModal();
+  });
+
+  document.body.appendChild(modal);
+  close.focus();
 }
 
 function animateQuestionCard(questionKey) {
@@ -372,6 +556,7 @@ function buildAnswerControl(q) {
 
   switch (q.type) {
     case 'choice':
+    case 'delayed-recall-choice':
       makeChoiceButtons(q.options);
       break;
     case 'multi-choice-exact':
@@ -701,6 +886,7 @@ function scoreQuestion(q) {
     case 'text-presence':
       return normalize(raw) ? 1 : 0;
     case 'choice':
+    case 'delayed-recall-choice':
       return q.answer ? (raw === q.answer ? 1 : 0) : 0;
     case 'multi-choice-exact': {
       if (!Array.isArray(raw) || !Array.isArray(q.answer)) return 0;
@@ -800,6 +986,94 @@ function maxScoreForSection(sectionId) {
   if (!section) return 0;
   if (Number.isFinite(section.maxPoints)) return section.maxPoints;
   return section.questions.length;
+}
+
+function buildAnswerRows() {
+  return SECTIONS.flatMap(section => section.questions.map(q => ({
+    section_id: section.id,
+    question_id: q.id,
+    question_text: q.text,
+    answer_value: state.answers[q.id] ?? null,
+    score: scoreQuestion(q),
+  })));
+}
+
+function buildAssessmentPayload(feedbackCards) {
+  const { total, bySection } = computeCognitiveScore();
+  return {
+    total_score: total,
+    max_score: 97,
+    risk_level: riskLevel(total),
+    section_scores: {
+      4: bySection[4] ?? 0,
+      5: bySection[5] ?? 0,
+      6: bySection[6] ?? 0,
+    },
+    profile: {
+      gender: state.answers.s1q1 ?? null,
+      age: state.answers.s1q2 ?? null,
+      education: state.answers.s1q6 ?? null,
+      marital_status: state.answers.s1q7 ?? null,
+      monthly_income: state.answers.s1q9 ?? null,
+      family_dementia_history: state.answers.s1q10 ?? null,
+      sleep_time: state.answers.s1q11 ?? null,
+      wake_time: state.answers.s1q12 ?? null,
+      smoking: state.answers.s1q13 ?? null,
+      alcohol: state.answers.s1q14 ?? null,
+      exercise_frequency: state.answers.s1q15 ?? null,
+      diseases: Array.isArray(state.answers.s1q16) ? state.answers.s1q16 : [],
+    },
+    answers: buildAnswerRows(),
+    feedback: feedbackCards,
+  };
+}
+
+function updateSubmissionStatus() {
+  const statusEl = document.getElementById('submission-status');
+  if (!statusEl) return;
+
+  statusEl.hidden = false;
+  statusEl.className = `submission-status ${state.submissionStatus}`;
+
+  if (state.submissionStatus === 'saving') {
+    statusEl.textContent = 'กำลังบันทึกผลประเมิน...';
+  } else if (state.submissionStatus === 'saved') {
+    statusEl.textContent = `บันทึกผลประเมินแล้ว รหัสอ้างอิง: ${state.submissionCode}`;
+  } else if (state.submissionStatus === 'error') {
+    statusEl.textContent = `บันทึกผลไม่สำเร็จ: ${state.submissionError || 'กรุณาตรวจสอบการเชื่อมต่อระบบ'}`;
+  } else {
+    statusEl.hidden = true;
+    statusEl.textContent = '';
+  }
+}
+
+async function submitAssessmentResult(feedbackCards) {
+  if (state.submissionSent || state.submissionStatus === 'saving') return;
+
+  state.submissionSent = true;
+  state.submissionStatus = 'saving';
+  state.submissionError = '';
+  updateSubmissionStatus();
+
+  try {
+    const response = await fetch('api/assessment-submit.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildAssessmentPayload(feedbackCards)),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error || 'server_error');
+    }
+    state.submissionStatus = 'saved';
+    state.submissionCode = data.submission_code || '';
+  } catch (error) {
+    state.submissionStatus = 'error';
+    state.submissionError = error.message;
+    state.submissionSent = false;
+  }
+
+  updateSubmissionStatus();
 }
 
 /* ---------------------------------------------------------
@@ -924,6 +1198,8 @@ function renderResult() {
     setTimeout(() => openFeedbackModal(feedbackCards), 250);
   }
 
+  updateSubmissionStatus();
+  submitAssessmentResult(feedbackCards);
   renderMarigoldRing(document.getElementById('marigold-ring-full'), 6, 6, level);
 }
 
