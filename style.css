@@ -365,48 +365,11 @@ button { font-family: var(--font-body); cursor: pointer; }
   place-items: center;
   animation: answer-enter 0.38s ease 80ms both;
 }
-.welcome-image-frame {
-  width: min(25rem, 78vw);
-  aspect-ratio: 16 / 10;
-  margin: 0;
-  border-radius: 24px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(13, 110, 253, 0.16);
-  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.12);
-}
 .welcome-hero-image {
-  width: 100%;
-  height: 100%;
+  width: min(25rem, 78vw);
+  height: auto;
   display: block;
   object-fit: contain;
-}
-.welcome-image-placeholder {
-  height: 100%;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 0.35rem;
-  padding: 1.4rem;
-  text-align: center;
-  color: var(--forest);
-  background:
-    linear-gradient(135deg, rgba(255,255,255,0.80), rgba(239,246,255,0.82)),
-    repeating-linear-gradient(135deg, rgba(13,110,253,0.07) 0 1px, transparent 1px 14px);
-}
-.welcome-image-placeholder span {
-  font-size: 3.5rem;
-  line-height: 1;
-}
-.welcome-image-placeholder strong {
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-}
-.welcome-image-placeholder small {
-  max-width: 14rem;
-  color: var(--ink-soft);
-  font-size: 0.82rem;
-  line-height: 1.45;
 }
 .welcome-info {
   width: min(1180px, 100%);
@@ -1254,22 +1217,8 @@ html.font-xlarge { --base-size: 24px; }
     min-height: 10.5rem;
     order: 0;
   }
-  .welcome-image-frame {
+  .welcome-hero-image {
     width: min(15rem, 78vw);
-    aspect-ratio: 16 / 10;
-    border-radius: 18px;
-  }
-  .welcome-image-placeholder {
-    padding: 1rem;
-  }
-  .welcome-image-placeholder span {
-    font-size: 2.3rem;
-  }
-  .welcome-image-placeholder strong {
-    font-size: 1rem;
-  }
-  .welcome-image-placeholder small {
-    font-size: 0.76rem;
   }
   .welcome-info {
     grid-template-columns: 1fr;
