@@ -416,31 +416,13 @@ td strong {
 }
 
 .answer-matrix-table th:first-child,
-.answer-matrix-table td:first-child,
-.answer-matrix-table th:nth-child(2),
-.answer-matrix-table td:nth-child(2) {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  background: #fff;
-}
-
-.answer-matrix-table th:first-child,
-.answer-matrix-table th:nth-child(2) {
-  z-index: 5;
-  background: #f4f8fc;
-}
-
-.answer-matrix-table th:first-child,
 .answer-matrix-table td:first-child {
   min-width: 170px;
 }
 
 .answer-matrix-table th:nth-child(2),
 .answer-matrix-table td:nth-child(2) {
-  left: 170px;
   min-width: 148px;
-  box-shadow: 10px 0 14px rgba(19, 34, 53, .06);
 }
 
 .question-heading {

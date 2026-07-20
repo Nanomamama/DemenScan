@@ -9,12 +9,14 @@ $active = $active ?? '';
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= h($title ?? 'DemenScan Admin') ?></title>
   <link rel="stylesheet" href="admin.css">
+  <link rel="apple-touch-icon" sizes="180x180" href="../image/logo-demenscan.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../image/logo-demenscan.png">
 </head>
 <body>
   <div class="shell">
     <aside class="sidebar">
       <div class="brand" aria-label="DemenScan Admin">
-        <span class="brand-mark" aria-hidden="true">D</span>
+        <span class="brand-mark" aria-hidden="true">DM</span>
         <span class="brand-label">DemenScan Admin</span>
       </div>
       <nav class="nav" aria-label="Admin navigation">

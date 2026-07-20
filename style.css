@@ -532,6 +532,16 @@ button { font-family: var(--font-body); cursor: pointer; }
 .question-card-enter {
   animation: question-enter 0.28s ease both;
 }
+.question-card.single-page-card-shell {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+.question-card.single-page-card-shell .q-index,
+.question-card.single-page-card-shell .q-body {
+  padding: 0 0.25rem;
+}
 .q-index { color: var(--ink-soft); font-size: 0.9rem; margin: 0 0 0.4rem; }
 .q-body { display: flex; align-items: flex-start; gap: 0.6rem; justify-content: space-between; }
 .q-body h2 { font-size: 1.28rem; line-height: 1.4; flex: 1; font-weight: 700; color: var(--forest); }
@@ -699,6 +709,60 @@ button { font-family: var(--font-body); cursor: pointer; }
   animation-delay: 0s;
 }
 
+.single-page-list {
+  gap: 1.1rem;
+}
+.single-page-question-list {
+  display: grid;
+  gap: 1.1rem;
+}
+.single-page-question-item {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.1rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07);
+  animation: answer-enter 0.26s ease both;
+  animation-delay: calc(var(--stagger-index, 0) * 32ms);
+}
+.single-page-question-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+.single-page-question-number {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--action-primary);
+  color: #FFFFFF;
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0.42rem 0.7rem;
+}
+.single-page-question-header h3 {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.02rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.single-page-speak {
+  width: 2.45rem;
+  height: 2.45rem;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 2.45rem;
+}
+.single-page-question-item .answer-control {
+  gap: 0.55rem;
+}
+.single-page-question-item .multi-choice-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .delayed-recall-card {
   width: 100%;
   min-height: 220px;
@@ -712,10 +776,30 @@ button { font-family: var(--font-body); cursor: pointer; }
   padding: 1.4rem;
   text-align: center;
 }
+.delayed-recall-ready-card {
+  gap: 0.75rem;
+  background: #FFFFFF;
+}
 .delayed-recall-label {
   color: var(--ink-soft);
   font-size: 1rem;
   margin: 0;
+}
+.delayed-recall-title {
+  max-width: 32rem;
+  font-size: 1.18rem;
+  line-height: 1.45;
+}
+.delayed-recall-instruction {
+  max-width: 34rem;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  line-height: 1.65;
+  margin: 0;
+}
+.delayed-recall-start-btn {
+  min-width: min(100%, 11rem);
+  margin-top: 0.35rem;
 }
 .delayed-recall-words {
   color: var(--forest);
@@ -1327,6 +1411,17 @@ html.font-xlarge { --base-size: 24px; }
   }
   .multi-choice-grid,
   .multi-input-grid {
+    grid-template-columns: 1fr;
+  }
+  .single-page-question-item {
+    padding: 0.85rem;
+  }
+  .single-page-question-header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.5rem;
+  }
+  .single-page-question-item .multi-choice-grid {
     grid-template-columns: 1fr;
   }
   .nav-footer {

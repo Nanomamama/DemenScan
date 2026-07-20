@@ -71,16 +71,22 @@ const progressWrap = document.getElementById('progress-wrap');
 const sectionTabs = document.getElementById('section-tabs');
 const questionCard = screenQuestion.querySelector('.question-card');
 let lastRenderedQuestionKey = '';
+const delayedRecallStarted = {};
 const delayedRecallRevealed = {};
 const delayedRecallTimers = {};
+
+function resetDelayedRecallState() {
+  Object.keys(delayedRecallStarted).forEach(key => delete delayedRecallStarted[key]);
+  Object.keys(delayedRecallRevealed).forEach(key => delete delayedRecallRevealed[key]);
+  Object.values(delayedRecallTimers).forEach(timer => clearTimeout(timer));
+  Object.keys(delayedRecallTimers).forEach(key => delete delayedRecallTimers[key]);
+}
 
 document.getElementById('btn-start').addEventListener('click', () => {
   state.screen = 'question';
   state.sectionIdx = 0;
   state.questionIdx = 0;
-  Object.keys(delayedRecallRevealed).forEach(key => delete delayedRecallRevealed[key]);
-  Object.values(delayedRecallTimers).forEach(timer => clearTimeout(timer));
-  Object.keys(delayedRecallTimers).forEach(key => delete delayedRecallTimers[key]);
+  resetDelayedRecallState();
   state.resultPopupShown = false;
   state.submissionSent = false;
   state.submissionStatus = 'idle';
@@ -95,9 +101,7 @@ document.getElementById('btn-restart').addEventListener('click', () => {
   state.sectionIdx = 0;
   state.questionIdx = 0;
   state.answers = {};
-  Object.keys(delayedRecallRevealed).forEach(key => delete delayedRecallRevealed[key]);
-  Object.values(delayedRecallTimers).forEach(timer => clearTimeout(timer));
-  Object.keys(delayedRecallTimers).forEach(key => delete delayedRecallTimers[key]);
+  resetDelayedRecallState();
   state.resultPopupShown = false;
   state.submissionSent = false;
   state.submissionStatus = 'idle';
@@ -184,6 +188,10 @@ document.querySelectorAll('.btn-speak[data-speak-target]').forEach(btn => {
 document.getElementById('btn-speak-question').addEventListener('click', (e) => {
   const q = currentQuestion();
   if (!q) return;
+  if (isDelayedRecallIntro(q)) {
+    speak('วิธีทำข้อนี้: กดเริ่มเพื่อดูชุดคำศัพท์เป็นเวลา 3 วินาที จากนั้นเลือกคำตอบที่เรียงย้อนหลังจากคำสุดท้ายไปคำแรก', e.currentTarget);
+    return;
+  }
   if (isWaitingForDelayedRecall(q)) {
     speak('จำชุดคำศัพท์นี้: ' + (Array.isArray(q.words) ? q.words.join(', ') : ''), e.currentTarget);
     return;
@@ -196,10 +204,22 @@ document.getElementById('btn-speak-question').addEventListener('click', (e) => {
    --------------------------------------------------------- */
 function currentSection() { return SECTIONS[state.sectionIdx]; }
 function currentQuestion() { return currentSection().questions[state.questionIdx]; }
+const SINGLE_PAGE_SECTION_IDS = [1, 2, 3];
+function isSinglePageSection(section = currentSection()) {
+  return SINGLE_PAGE_SECTION_IDS.includes(section.id);
+}
 
 function goNext() {
   const section = currentSection();
-  if (state.questionIdx < section.questions.length - 1) {
+  if (isSinglePageSection(section)) {
+    if (state.sectionIdx < SECTIONS.length - 1) {
+      state.sectionIdx++;
+      state.questionIdx = 0;
+    } else {
+      state.screen = 'result';
+      state.resultPopupShown = false;
+    }
+  } else if (state.questionIdx < section.questions.length - 1) {
     state.questionIdx++;
   } else if (state.sectionIdx < SECTIONS.length - 1) {
     state.sectionIdx++;
@@ -211,11 +231,20 @@ function goNext() {
   render();
 }
 function goPrev() {
-  if (state.questionIdx > 0) {
+  if (isSinglePageSection() && state.sectionIdx > 0) {
+    state.sectionIdx--;
+    state.questionIdx = isSinglePageSection(SECTIONS[state.sectionIdx])
+      ? 0
+      : SECTIONS[state.sectionIdx].questions.length - 1;
+  } else if (isSinglePageSection()) {
+    state.screen = 'welcome';
+  } else if (state.questionIdx > 0) {
     state.questionIdx--;
   } else if (state.sectionIdx > 0) {
     state.sectionIdx--;
-    state.questionIdx = SECTIONS[state.sectionIdx].questions.length - 1;
+    state.questionIdx = isSinglePageSection(SECTIONS[state.sectionIdx])
+      ? 0
+      : SECTIONS[state.sectionIdx].questions.length - 1;
   } else {
     state.screen = 'welcome';
   }
@@ -241,6 +270,8 @@ function render() {
 function renderQuestion() {
   const section = currentSection();
   const q = currentQuestion();
+  const usesSinglePageLayout = isSinglePageSection(section);
+  questionCard.classList.toggle('single-page-card-shell', usesSinglePageLayout);
   const questionKey = `${section.id}-${q.id}-${state.questionIdx}`;
   const isSameQuestion = questionKey === lastRenderedQuestionKey;
 
@@ -248,21 +279,37 @@ function renderQuestion() {
   document.getElementById('progress-fraction').textContent = `${state.sectionIdx + 1} / ${SECTIONS.length}`;
   document.getElementById('q-index').textContent = `ข้อ ${state.questionIdx + 1} จาก ${section.questions.length}`;
   document.getElementById('q-text').textContent = q.text;
+  if (usesSinglePageLayout) {
+    document.getElementById('q-index').textContent = `ข้อ 1-${section.questions.length} จาก ${section.questions.length}`;
+    document.getElementById('q-text').textContent = `ส่วนที่ ${section.id}: ${section.title}`;
+  }
+  document.getElementById('btn-speak-question').hidden = usesSinglePageLayout;
 
   const hintEl = document.getElementById('q-hint');
   if (q.hint) { hintEl.hidden = false; hintEl.textContent = q.hint; }
   else { hintEl.hidden = true; }
+  if (usesSinglePageLayout) hintEl.hidden = true;
 
   const area = document.getElementById('q-answer-area');
+  area.classList.toggle('single-page-list', usesSinglePageLayout);
   area.classList.toggle('answers-static', isSameQuestion);
   area.innerHTML = '';
-  if (q.image) area.appendChild(buildQuestionImage(q.image));
-  const waitingForRecall = isWaitingForDelayedRecall(q);
-  if (waitingForRecall) {
-    area.appendChild(buildDelayedRecallPrompt(q));
-    startDelayedRecallTimer(q, questionKey);
+  let recallNeedsStart = false;
+  let waitingForRecall = false;
+  if (usesSinglePageLayout) {
+    area.appendChild(buildSinglePageQuestionList(section));
   } else {
-    area.appendChild(buildAnswerControl(q));
+    if (q.image) area.appendChild(buildQuestionImage(q.image));
+    recallNeedsStart = isDelayedRecallIntro(q);
+    waitingForRecall = isWaitingForDelayedRecall(q);
+    if (recallNeedsStart) {
+      area.appendChild(buildDelayedRecallStartPrompt(q));
+    } else if (waitingForRecall) {
+      area.appendChild(buildDelayedRecallPrompt(q));
+      startDelayedRecallTimer(q, questionKey);
+    } else {
+      area.appendChild(buildAnswerControl(q));
+    }
   }
   animateQuestionCard(questionKey);
 
@@ -274,14 +321,85 @@ function renderQuestion() {
   nextBtn.innerHTML = isLastQuestion
     ? '<span class="btn-label">ดูผลลัพธ์</span><span class="btn-icon" aria-hidden="true">✓</span>'
     : '<span class="btn-label">ถัดไป</span><span class="btn-icon" aria-hidden="true">→</span>';
-  nextBtn.disabled = waitingForRecall;
+  nextBtn.disabled = recallNeedsStart || waitingForRecall;
 
-  document.getElementById('skip-warning').hidden = waitingForRecall || isAnswered(q);
+  document.getElementById('skip-warning').hidden = usesSinglePageLayout || recallNeedsStart || waitingForRecall || isAnswered(q);
   renderSectionTabs();
 }
 
+function buildSinglePageQuestionList(section) {
+  const list = document.createElement('div');
+  list.className = 'single-page-question-list';
+
+  section.questions.forEach((question, index) => {
+    const item = document.createElement('section');
+    item.className = 'single-page-question-item';
+    addStagger(item, index);
+
+    const header = document.createElement('div');
+    header.className = 'single-page-question-header';
+
+    const number = document.createElement('span');
+    number.className = 'single-page-question-number';
+    number.textContent = `ข้อ ${index + 1}`;
+    header.appendChild(number);
+
+    const title = document.createElement('h3');
+    title.textContent = question.text;
+    header.appendChild(title);
+
+    const speakBtn = document.createElement('button');
+    speakBtn.type = 'button';
+    speakBtn.className = 'btn-speak btn-speak-small single-page-speak';
+    speakBtn.setAttribute('aria-label', `ฟังข้อ ${index + 1}`);
+    speakBtn.innerHTML = '🔊';
+    speakBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const optionText = Array.isArray(question.options) && question.options.length
+        ? `. ตัวเลือก: ${question.options.join(', ')}`
+        : '';
+      speak(`${question.text}${optionText}`, event.currentTarget);
+    });
+    header.appendChild(speakBtn);
+
+    item.appendChild(header);
+
+    if (question.hint) {
+      const hint = document.createElement('p');
+      hint.className = 'q-hint';
+      hint.textContent = question.hint;
+      item.appendChild(hint);
+    }
+
+    if (question.image) item.appendChild(buildQuestionImage(question.image));
+    item.appendChild(buildAnswerControl(question));
+    list.appendChild(item);
+  });
+
+  return list;
+}
+
+function isDelayedRecallQuestion(q) {
+  return q.type === 'delayed-recall-choice';
+}
+
+function isDelayedRecallIntro(q) {
+  return isDelayedRecallQuestion(q) && !delayedRecallStarted[q.id] && !delayedRecallRevealed[q.id];
+}
+
 function isWaitingForDelayedRecall(q) {
-  return q.type === 'delayed-recall-choice' && !delayedRecallRevealed[q.id];
+  return isDelayedRecallQuestion(q) && delayedRecallStarted[q.id] && !delayedRecallRevealed[q.id];
+}
+
+function startDelayedRecall(q) {
+  delayedRecallStarted[q.id] = true;
+  delayedRecallRevealed[q.id] = false;
+  if (delayedRecallTimers[q.id]) {
+    clearTimeout(delayedRecallTimers[q.id]);
+    delete delayedRecallTimers[q.id];
+  }
+  lastRenderedQuestionKey = '';
+  renderQuestion();
 }
 
 function startDelayedRecallTimer(q, questionKey) {
@@ -295,6 +413,36 @@ function startDelayedRecallTimer(q, questionKey) {
       renderQuestion();
     }
   }, q.delayMs || 3000);
+}
+
+function buildDelayedRecallStartPrompt(q) {
+  const card = document.createElement('div');
+  card.className = 'delayed-recall-card delayed-recall-ready-card';
+  addStagger(card, 0);
+
+  const label = document.createElement('p');
+  label.className = 'delayed-recall-label';
+  label.textContent = 'วิธีทำข้อนี้';
+  card.appendChild(label);
+
+  const title = document.createElement('h3');
+  title.className = 'delayed-recall-title';
+  title.textContent = 'จำคำศัพท์ แล้วเลือกคำตอบที่เรียงย้อนหลังให้ถูกต้อง';
+  card.appendChild(title);
+
+  const instruction = document.createElement('p');
+  instruction.className = 'delayed-recall-instruction';
+  instruction.textContent = 'เมื่อกดเริ่ม ระบบจะแสดงชุดคำศัพท์เป็นเวลา 3 วินาที แล้วซ่อนคำศัพท์ก่อนแสดงตัวเลือก ให้เลือกคำตอบที่เรียงจากคำสุดท้ายย้อนกลับไปคำแรก';
+  card.appendChild(instruction);
+
+  const startBtn = document.createElement('button');
+  startBtn.type = 'button';
+  startBtn.className = 'btn-primary delayed-recall-start-btn';
+  startBtn.textContent = 'เริ่ม';
+  startBtn.addEventListener('click', () => startDelayedRecall(q));
+  card.appendChild(startBtn);
+
+  return card;
 }
 
 function buildDelayedRecallPrompt(q) {

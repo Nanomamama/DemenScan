@@ -28,6 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>เข้าสู่ระบบ Admin | DemenScan</title>
   <link rel="stylesheet" href="admin.css">
+  <link rel="apple-touch-icon" sizes="180x180" href="../image/logo-demenscan.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="../image/logo-demenscan.png">
 </head>
 <body class="login-page">
   <main class="login-card">

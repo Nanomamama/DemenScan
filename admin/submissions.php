@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 require_once __DIR__ . '/../config/admin_data.php';
@@ -6,7 +7,13 @@ require_once __DIR__ . '/../config/admin_data.php';
 $admin = require_admin();
 $filters = collect_submission_filters($_GET);
 $page = max(1, (int) ($_GET['page'] ?? 1));
-$perPage = min(100, max(10, (int) ($_GET['per_page'] ?? 20)));
+
+
+$perPage = (int) ($_GET['per_page'] ?? 20);
+if ($perPage !== 999999) {
+    $perPage = min(100, max(10, $perPage));
+}
+
 $total = count_submissions($filters);
 $answerTable = fetch_submission_answer_table($filters, $page, $perPage);
 $rows = $answerTable['rows'];
@@ -53,18 +60,25 @@ require __DIR__ . '/_header.php';
 
 <section class="panel">
   <div class="panel-header">
-    <h2>รายการผลประเมิน <?= h($total) ?> รายการ</h2>
+    <h2>รายการผลประเมิน <?= h($total) ?>  รายการ</h2>
     <form method="get">
       <?php foreach ($filters as $key => $value): ?>
-        <input type="hidden" name="<?= h($key) ?>" value="<?= h($value) ?>">
+        <?php // ป้องกันไม่ให้ค่า page และ per_page ตัวเก่าไปทับค่าที่กำลังจะเลือกใหม่ ?>
+        <?php if ($key !== 'per_page' && $key !== 'page'): ?>
+          <input type="hidden" name="<?= h($key) ?>" value="<?= h($value) ?>">
+        <?php endif; ?>
       <?php endforeach; ?>
+      
       <select name="per_page" onchange="this.form.submit()">
         <?php foreach ([20, 50, 100] as $size): ?>
           <option value="<?= $size ?>" <?= $perPage === $size ? 'selected' : '' ?>><?= $size ?> รายการ</option>
         <?php endforeach; ?>
+        
+        <!-- เพิ่มตัวเลือก "ทั้งหมด" โดยกำหนดค่าเป็นจำนวนเยอะๆ (เช่น 999999) -->
+        <option value="999999" <?= $perPage === 999999 ? 'selected' : '' ?>>ทั้งหมด</option>
       </select>
     </form>
-  </div>
+</div>
   <div class="table-wrap wide-table-wrap">
     <table class="answer-matrix-table">
       <thead>
@@ -109,6 +123,6 @@ require __DIR__ . '/_header.php';
         <a class="btn btn-secondary" href="submissions.php?<?= h(filter_query_string(['page' => $page + 1])) ?>">ถัดไป</a>
       <?php endif; ?>
     </div>
-  </div>
+  </div>          
 </section>
 <?php require __DIR__ . '/_footer.php'; ?>
