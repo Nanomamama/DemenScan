@@ -9,7 +9,7 @@ $isLocalhost = in_array($_SERVER['SERVER_NAME'] ?? '', ['localhost', '127.0.0.1'
 if ($isLocalhost) {
     // --- ตั้งค่าสำหรับ XAMPP (Localhost) 
     define('DB_HOST', 'localhost');
-    define('DB_PORT', 3307);
+    define('DB_PORT', 3306);
     define('DB_NAME', 'demenscan');
     define('DB_USER', 'root');               
     define('DB_PASS', '');                
