@@ -114,18 +114,8 @@ function scheduleAssessmentDraftSave() {
   setTimeout(saveAssessmentDraft, 0);
 }
 
-function flatIndex() {
-  let idx = 0;
-  for (let i = 0; i < state.sectionIdx; i++)
-    idx += SECTIONS[i].questions.length;
-  return idx + state.questionIdx;
-}
-function totalQuestions() {
-  return SECTIONS.reduce((sum, s) => sum + s.questions.length, 0);
-}
-
 /* ---------------------------------------------------------
-   3) DOM refs
+   3) DOM REFS & GLOBAL CONTROLS
    --------------------------------------------------------- */
 const screenWelcome = document.getElementById("screen-welcome");
 const screenQuestion = document.getElementById("screen-question");
@@ -133,7 +123,12 @@ const screenResult = document.getElementById("screen-result");
 const progressWrap = document.getElementById("progress-wrap");
 const sectionTabs = document.getElementById("section-tabs");
 const questionCard = screenQuestion.querySelector(".question-card");
+const answerArea = document.getElementById("q-answer-area");
+const fontSmallerBtn = document.getElementById("font-smaller");
+const fontLargerBtn = document.getElementById("font-larger");
+const FONT_CLASSES = ["", "font-large", "font-xlarge"];
 let lastRenderedQuestionKey = "";
+let fontStep = 0;
 const delayedRecallStarted = {};
 const delayedRecallRevealed = {};
 const delayedRecallTimers = {};
@@ -151,56 +146,47 @@ function resetDelayedRecallState() {
   );
 }
 
-document.getElementById("btn-start").addEventListener("click", () => {
-  state.screen = "question";
-  state.sectionIdx = 0;
-  state.questionIdx = 0;
-  resetDelayedRecallState();
+function resetSubmissionState() {
   state.resultPopupShown = false;
   state.submissionSent = false;
   state.submissionStatus = "idle";
   state.submissionCode = "";
   state.submissionError = "";
-  saveAssessmentDraft();
-  render();
-});
-document.getElementById("btn-prev").addEventListener("click", goPrev);
-document.getElementById("btn-next").addEventListener("click", goNext);
-document.getElementById("btn-restart").addEventListener("click", () => {
-  state.screen = "welcome";
-  state.sectionIdx = 0;
-  state.questionIdx = 0;
-  state.answers = {};
-  resetDelayedRecallState();
-  state.resultPopupShown = false;
-  state.submissionSent = false;
-  state.submissionStatus = "idle";
-  state.submissionCode = "";
-  state.submissionError = "";
-  clearAssessmentDraft();
-  render();
-});
+}
 
-document
-  .getElementById("q-answer-area")
-  .addEventListener("input", scheduleAssessmentDraftSave);
-document
-  .getElementById("q-answer-area")
-  .addEventListener("change", scheduleAssessmentDraftSave);
-document
-  .getElementById("q-answer-area")
-  .addEventListener("click", scheduleAssessmentDraftSave);
+function bindGlobalEvents() {
+  document.getElementById("btn-start").addEventListener("click", () => {
+    state.screen = "question";
+    state.sectionIdx = 0;
+    state.questionIdx = 0;
+    resetDelayedRecallState();
+    resetSubmissionState();
+    saveAssessmentDraft();
+    render();
+  });
 
-document
-  .getElementById("font-larger")
-  .addEventListener("click", () => cycleFontSize(1));
-document
-  .getElementById("font-smaller")
-  .addEventListener("click", () => cycleFontSize(-1));
-const fontSmallerBtn = document.getElementById("font-smaller");
-const fontLargerBtn = document.getElementById("font-larger");
-const FONT_CLASSES = ["", "font-large", "font-xlarge"];
-let fontStep = 0;
+  document.getElementById("btn-prev").addEventListener("click", goPrev);
+  document.getElementById("btn-next").addEventListener("click", goNext);
+
+  document.getElementById("btn-restart").addEventListener("click", () => {
+    state.screen = "welcome";
+    state.sectionIdx = 0;
+    state.questionIdx = 0;
+    state.answers = {};
+    resetDelayedRecallState();
+    resetSubmissionState();
+    clearAssessmentDraft();
+    render();
+  });
+
+  answerArea.addEventListener("input", scheduleAssessmentDraftSave);
+  answerArea.addEventListener("change", scheduleAssessmentDraftSave);
+  answerArea.addEventListener("click", scheduleAssessmentDraftSave);
+
+  fontLargerBtn.addEventListener("click", () => cycleFontSize(1));
+  fontSmallerBtn.addEventListener("click", () => cycleFontSize(-1));
+}
+
 function cycleFontSize(dir) {
   fontStep = Math.min(2, Math.max(0, fontStep + dir));
   document.documentElement.classList.remove("font-large", "font-xlarge");
@@ -255,16 +241,6 @@ function setSpeakButtonLoading(btnEl, isLoading, restoreLabel) {
   } else {
     btnEl.innerHTML = restoreLabel ?? btnEl.dataset.prevLabel ?? "🔊";
   }
-}
-
-// สำรอง: Web Speech API ของเบราว์เซอร์ เป็น fallback สำหรับการเล่นเสียง
-function speakFallback(text) {
-  if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = "th-TH";
-  utter.rate = 0.95;
-  window.speechSynthesis.speak(utter);
 }
 
 document.querySelectorAll(".btn-speak[data-speak-target]").forEach((btn) => {
@@ -418,7 +394,7 @@ function renderQuestion() {
       area.appendChild(buildDelayedRecallStartPrompt(q));
     } else if (waitingForRecall) {
       area.appendChild(buildDelayedRecallPrompt(q));
-      startDelayedRecallTimer(q, questionKey);
+      startDelayedRecallTimer(q);
     } else {
       area.appendChild(buildAnswerControl(q));
     }
@@ -528,7 +504,7 @@ function startDelayedRecall(q) {
   renderQuestion();
 }
 
-function startDelayedRecallTimer(q, questionKey) {
+function startDelayedRecallTimer(q) {
   if (delayedRecallTimers[q.id]) return;
   delayedRecallTimers[q.id] = setTimeout(() => {
     delayedRecallRevealed[q.id] = true;
@@ -1191,7 +1167,7 @@ function buildAnswerControl(q) {
 }
 
 /* ---------------------------------------------------------
-   7) SCORING
+   7) SCORING & RISK
    --------------------------------------------------------- */
 function normalize(str) {
   return String(str ?? "")
@@ -1342,6 +1318,9 @@ function maxScoreForSection(sectionId) {
   return section.questions.length;
 }
 
+/* ---------------------------------------------------------
+   8) SUBMISSION
+   --------------------------------------------------------- */
 function buildAnswerRows() {
   return SECTIONS.flatMap((section) =>
     section.questions.map((q) => ({
@@ -1447,7 +1426,7 @@ async function submitAssessmentResult(feedbackCards) {
 }
 
 /* ---------------------------------------------------------
-   8) PERSONALIZED FEEDBACK (from Section 1 answers)
+   9) PERSONALIZED FEEDBACK (from Section 1 answers)
    --------------------------------------------------------- */
 function sleepHours() {
   const sleep = state.answers["s1q11"];
@@ -1534,7 +1513,7 @@ function buildFeedbackCards(level) {
 }
 
 /* ---------------------------------------------------------
-   9) RESULT SCREEN
+   10) RESULT SCREEN
    --------------------------------------------------------- */
 function renderResult() {
   const { total, bySection } = computeCognitiveScore();
@@ -1642,10 +1621,10 @@ function openFeedbackModal(cards) {
 }
 
 /* ---------------------------------------------------------
-   10) MARIGOLD PROGRESS RING (signature visual element)
+   11) MARIGOLD PROGRESS RING (signature visual element)
    วาดกลีบดอกดาวเรือง 6 กลีบ = 6 ส่วนของแบบประเมิน
    --------------------------------------------------------- */
-function petalPath(cx, cy, r, angleDeg, size) {
+function petalPath(cx, cy, r, angleDeg) {
   const rad = (angleDeg * Math.PI) / 180;
   const x = cx + r * Math.cos(rad);
   const y = cy + r * Math.sin(rad);
@@ -1679,7 +1658,7 @@ function renderMarigoldRing(
   const petalR = r * 0.32;
   for (let i = 0; i < totalCount; i++) {
     const angle = (360 / totalCount) * i - 90;
-    const { x, y } = petalPath(cx, cy, r * 0.62, angle, petalR);
+    const { x, y } = petalPath(cx, cy, r * 0.62, angle);
     const circle = document.createElementNS(
       "http://www.w3.org/2000/svg",
       "circle",
@@ -1709,6 +1688,7 @@ function renderMarigoldRing(
 /* ---------------------------------------------------------
    INIT
    --------------------------------------------------------- */
+bindGlobalEvents();
 updateFontSizeControls();
 restoreAssessmentDraft();
 render();
