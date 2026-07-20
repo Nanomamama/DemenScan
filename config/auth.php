@@ -62,6 +62,37 @@ function login_admin(string $username, string $password): bool
     return true;
 }
 
+function admin_username_exists(string $username, int $exceptAdminId): bool
+{
+    $stmt = db()->prepare('SELECT COUNT(*) FROM admins WHERE username = ? AND id <> ?');
+    $stmt->execute([$username, $exceptAdminId]);
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function update_admin_profile(int $adminId, string $username, string $displayName): void
+{
+    $stmt = db()->prepare('UPDATE admins SET username = ?, display_name = ? WHERE id = ? AND is_active = 1');
+    $stmt->execute([$username, $displayName, $adminId]);
+}
+
+function change_admin_password(int $adminId, string $currentPassword, string $newPassword): bool
+{
+    $stmt = db()->prepare('SELECT password_hash FROM admins WHERE id = ? AND is_active = 1');
+    $stmt->execute([$adminId]);
+    $hash = (string) $stmt->fetchColumn();
+
+    if ($hash === '' || !password_verify($currentPassword, $hash)) {
+        usleep(250000);
+        return false;
+    }
+
+    $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+    $update = db()->prepare('UPDATE admins SET password_hash = ? WHERE id = ? AND is_active = 1');
+    $update->execute([$newHash, $adminId]);
+
+    return true;
+}
+
 function logout_admin(): void
 {
     $_SESSION = [];
@@ -81,4 +112,3 @@ function risk_label(string $risk): string
         default => $risk,
     };
 }
-

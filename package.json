@@ -4,7 +4,8 @@
   "private": true,
   "description": "DemenScan frontend (no backend)",
   "scripts": {
-    "start": "serve -s . -l $PORT"
+    "start": "serve -s . -l $PORT",
+    "test": "node tests/form-audit.test.js"
   },
   "engines": {
     "node": ">=18"

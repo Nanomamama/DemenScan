@@ -1063,6 +1063,9 @@ button { font-family: var(--font-body); cursor: pointer; }
 .result-message { font-size: 1rem; color: var(--ink-soft); margin-bottom: 1.2rem; }
 .submission-status {
   display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
   justify-content: center;
   max-width: 100%;
   margin: 0 0 1.2rem;
@@ -1080,6 +1083,18 @@ button { font-family: var(--font-body); cursor: pointer; }
 .submission-status.error {
   background: #FEF2F2;
   color: var(--leaf-high);
+}
+.submission-retry-btn {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.32rem 0.68rem;
+  background: #FFFFFF;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.submission-retry-btn:hover {
+  background: rgba(255, 255, 255, 0.75);
 }
 
 .result-feedback { display: flex; flex-direction: column; gap: 0.8rem; text-align: left; }

@@ -200,9 +200,44 @@ function fetch_submission_detail(int $id): ?array
     ];
 }
 
+function delete_submissions_by_ids(array $ids): int
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+    if (!$ids) {
+        return 0;
+    }
+
+    $pdo = db();
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+    $pdo->beginTransaction();
+    try {
+        $answers = $pdo->prepare("DELETE FROM assessment_answers WHERE submission_id IN ($placeholders)");
+        $answers->execute($ids);
+
+        $submissions = $pdo->prepare("DELETE FROM assessment_submissions WHERE id IN ($placeholders)");
+        $submissions->execute($ids);
+        $deleted = $submissions->rowCount();
+
+        $pdo->commit();
+        return $deleted;
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $exception;
+    }
+}
+
 function filter_query_string(array $overrides = []): string
 {
     $query = array_merge($_GET, $overrides);
+    if (!array_key_exists('deleted', $overrides)) {
+        unset($query['deleted']);
+    }
+    if (!array_key_exists('delete_error', $overrides)) {
+        unset($query['delete_error']);
+    }
     foreach ($query as $key => $value) {
         if ($value === '' || $value === null) {
             unset($query[$key]);

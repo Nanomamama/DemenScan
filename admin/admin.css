@@ -118,6 +118,14 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(24, 120, 214, .14);
 }
 
+input[type="checkbox"] {
+  width: 18px;
+  min-height: 18px;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--blue-600);
+}
+
 button,
 .btn {
   display: inline-flex;
@@ -163,6 +171,12 @@ button:hover,
   background: #fff1f1;
   color: #9f2626;
   border: 1px solid #efc7c7;
+}
+
+.alert-success {
+  color: var(--success);
+  background: #e9f8f2;
+  border-color: #bde8da;
 }
 
 .shell {
@@ -269,6 +283,15 @@ button:hover,
   font-size: 14px;
 }
 
+.sidebar-user a {
+  color: #fff;
+  text-decoration: none;
+}
+
+.sidebar-user a:hover {
+  text-decoration: underline;
+}
+
 .workspace {
   min-width: 0;
   min-height: 100vh;
@@ -354,6 +377,38 @@ button:hover,
   font-size: 19px;
 }
 
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-form {
+  margin-top: 0;
+  padding: 16px;
+}
+
+.admin-form .alert {
+  margin-top: 0;
+}
+
+.bulk-delete-form {
+  margin: 0;
+}
+
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  color: var(--muted);
+  background: #fff;
+  border-bottom: 1px solid var(--line-soft);
+  font-weight: 800;
+  font-size: 13px;
+}
+
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -403,6 +458,12 @@ th {
   font-weight: 950;
 }
 
+.select-cell {
+  width: 46px;
+  min-width: 46px;
+  text-align: center;
+}
+
 tbody tr {
   transition: background .15s ease;
 }
@@ -422,6 +483,21 @@ td strong {
 
 .answer-matrix-table th:nth-child(2),
 .answer-matrix-table td:nth-child(2) {
+  min-width: 148px;
+}
+
+.answer-matrix-table th.select-cell,
+.answer-matrix-table td.select-cell {
+  min-width: 46px;
+}
+
+.answer-matrix-table th:nth-child(2),
+.answer-matrix-table td:nth-child(2) {
+  min-width: 170px;
+}
+
+.answer-matrix-table th:nth-child(3),
+.answer-matrix-table td:nth-child(3) {
   min-width: 148px;
 }
 
@@ -597,6 +673,7 @@ td strong {
   }
 
   .stats-grid,
+  .profile-grid,
   .filter-grid,
   .detail-grid {
     grid-template-columns: 1fr;

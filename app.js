@@ -10,7 +10,7 @@
    - progress ring
 
    Question content lives in sections/section1.js through section6.js.
-   Runtime state stays in memory only; nothing is saved to localStorage.
+   Assessment answers are auto-saved as a local draft until the server confirms submission.
    ========================================================== */
 
 /* ---------------------------------------------------------
@@ -52,6 +52,65 @@ const state = {
   submissionError: '',
 };
 
+const DRAFT_STORAGE_KEY = 'demenscan.assessmentDraft.v1';
+
+function draftSnapshot() {
+  return {
+    screen: state.screen,
+    sectionIdx: state.sectionIdx,
+    questionIdx: state.questionIdx,
+    answers: state.answers,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function saveAssessmentDraft() {
+  try {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftSnapshot()));
+  } catch (error) {
+    // Ignore storage failures so the assessment can still continue.
+  }
+}
+
+function clearAssessmentDraft() {
+  try {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch (error) {
+    // Ignore storage failures.
+  }
+}
+
+function restoreAssessmentDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return false;
+    const draft = JSON.parse(raw);
+    if (!draft || typeof draft !== 'object' || !draft.answers || typeof draft.answers !== 'object') {
+      return false;
+    }
+
+    state.answers = draft.answers;
+    state.screen = ['welcome', 'question', 'result'].includes(draft.screen) ? draft.screen : 'welcome';
+    state.sectionIdx = Math.min(Math.max(Number(draft.sectionIdx) || 0, 0), SECTIONS.length - 1);
+    state.questionIdx = Math.min(
+      Math.max(Number(draft.questionIdx) || 0, 0),
+      SECTIONS[state.sectionIdx].questions.length - 1
+    );
+    state.resultPopupShown = state.screen === 'result';
+    state.submissionSent = false;
+    state.submissionStatus = 'idle';
+    state.submissionCode = '';
+    state.submissionError = '';
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function scheduleAssessmentDraftSave() {
+  setTimeout(saveAssessmentDraft, 0);
+}
+
 function flatIndex() {
   let idx = 0;
   for (let i = 0; i < state.sectionIdx; i++) idx += SECTIONS[i].questions.length;
@@ -92,6 +151,7 @@ document.getElementById('btn-start').addEventListener('click', () => {
   state.submissionStatus = 'idle';
   state.submissionCode = '';
   state.submissionError = '';
+  saveAssessmentDraft();
   render();
 });
 document.getElementById('btn-prev').addEventListener('click', goPrev);
@@ -107,8 +167,13 @@ document.getElementById('btn-restart').addEventListener('click', () => {
   state.submissionStatus = 'idle';
   state.submissionCode = '';
   state.submissionError = '';
+  clearAssessmentDraft();
   render();
 });
+
+document.getElementById('q-answer-area').addEventListener('input', scheduleAssessmentDraftSave);
+document.getElementById('q-answer-area').addEventListener('change', scheduleAssessmentDraftSave);
+document.getElementById('q-answer-area').addEventListener('click', scheduleAssessmentDraftSave);
 
 document.getElementById('font-larger').addEventListener('click', () => cycleFontSize(1));
 document.getElementById('font-smaller').addEventListener('click', () => cycleFontSize(-1));
@@ -228,6 +293,7 @@ function goNext() {
     state.screen = 'result';
     state.resultPopupShown = false;
   }
+  saveAssessmentDraft();
   render();
 }
 function goPrev() {
@@ -248,6 +314,7 @@ function goPrev() {
   } else {
     state.screen = 'welcome';
   }
+  saveAssessmentDraft();
   render();
 }
 
@@ -619,6 +686,7 @@ function renderSectionTabs() {
       state.screen = 'question';
       state.sectionIdx = index;
       state.questionIdx = 0;
+      saveAssessmentDraft();
       render();
     });
 
@@ -648,6 +716,11 @@ function buildAnswerControl(q) {
       btn.addEventListener('click', () => {
         state.answers[q.id] = label;
         if (pointsMap) state.answers[q.id + '__points'] = pointsMap[i];
+        if (isSinglePageSection()) {
+          wrap.querySelectorAll('.choice-btn').forEach(choice => choice.classList.remove('selected'));
+          btn.classList.add('selected');
+          return;
+        }
         renderQuestion();
       });
       wrap.appendChild(btn);
@@ -668,9 +741,21 @@ function buildAnswerControl(q) {
       btn.innerHTML = `<span class="dot"></span><span>${label}</span>`;
       btn.addEventListener('click', () => {
         const current = Array.isArray(state.answers[q.id]) ? state.answers[q.id] : [];
-        state.answers[q.id] = current.includes(label)
-          ? current.filter(item => item !== label)
-          : [...current, label];
+        if (label === 'ไม่มี') {
+          state.answers[q.id] = current.includes(label) ? [] : [label];
+        } else {
+          const withoutNone = current.filter(item => item !== 'ไม่มี');
+          state.answers[q.id] = withoutNone.includes(label)
+            ? withoutNone.filter(item => item !== label)
+            : [...withoutNone, label];
+        }
+        if (isSinglePageSection()) {
+          const nextSelected = Array.isArray(state.answers[q.id]) ? state.answers[q.id] : [];
+          wrap.querySelectorAll('.multi-choice-btn').forEach(choice => {
+            choice.classList.toggle('selected', nextSelected.includes(choice.textContent.trim()));
+          });
+          return;
+        }
         renderQuestion();
       });
       grid.appendChild(btn);
@@ -1189,6 +1274,16 @@ function updateSubmissionStatus() {
     statusEl.textContent = `บันทึกผลประเมินแล้ว รหัสอ้างอิง: ${state.submissionCode}`;
   } else if (state.submissionStatus === 'error') {
     statusEl.textContent = `บันทึกผลไม่สำเร็จ: ${state.submissionError || 'กรุณาตรวจสอบการเชื่อมต่อระบบ'}`;
+    statusEl.appendChild(document.createTextNode(' '));
+    const retryBtn = document.createElement('button');
+    retryBtn.type = 'button';
+    retryBtn.className = 'submission-retry-btn';
+    retryBtn.textContent = 'ลองบันทึกอีกครั้ง';
+    retryBtn.addEventListener('click', () => {
+      const feedbackCards = buildFeedbackCards(riskLevel(computeCognitiveScore().total));
+      submitAssessmentResult(feedbackCards);
+    });
+    statusEl.appendChild(retryBtn);
   } else {
     statusEl.hidden = true;
     statusEl.textContent = '';
@@ -1215,10 +1310,12 @@ async function submitAssessmentResult(feedbackCards) {
     }
     state.submissionStatus = 'saved';
     state.submissionCode = data.submission_code || '';
+    clearAssessmentDraft();
   } catch (error) {
     state.submissionStatus = 'error';
     state.submissionError = error.message;
     state.submissionSent = false;
+    saveAssessmentDraft();
   }
 
   updateSubmissionStatus();
@@ -1437,4 +1534,5 @@ function renderMarigoldRing(svg, filledCount, totalCount, level, cx = 100, cy = 
    INIT
    --------------------------------------------------------- */
 updateFontSizeControls();
+restoreAssessmentDraft();
 render();

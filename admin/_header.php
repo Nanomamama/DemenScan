@@ -32,6 +32,12 @@ $active = $active ?? '';
           </span>
           <span class="nav-label">ผลประเมิน</span>
         </a>
+        <a class="<?= $active === 'profile' ? 'active' : '' ?>" href="profile.php" aria-label="โปรไฟล์" title="โปรไฟล์">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img"><path d="M12 12c2.2 0 4-1.8 4-4s-1.8-4-4-4-4 1.8-4 4 1.8 4 4 4Zm0 2c-3.8 0-7 2.3-7 5v1h14v-1c0-2.7-3.2-5-7-5Z"/></svg>
+          </span>
+          <span class="nav-label">โปรไฟล์</span>
+        </a>
         <a href="logout.php" aria-label="ออกจากระบบ" title="ออกจากระบบ">
           <span class="nav-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="img"><path d="M5 3h8v2H7v14h6v2H5V3Zm11.6 5.4L20.2 12l-3.6 3.6-1.4-1.4 1.2-1.2H11v-2h5.4l-1.2-1.2 1.4-1.4Z"/></svg>
@@ -41,7 +47,7 @@ $active = $active ?? '';
       </nav>
       <div class="sidebar-user">
         <span>เข้าสู่ระบบโดย</span>
-        <strong><?= h($admin['display_name'] ?? $admin['username'] ?? 'Admin') ?></strong>
+        <a href="profile.php"><strong><?= h($admin['display_name'] ?? $admin['username'] ?? 'Admin') ?></strong></a>
       </div>
     </aside>
     <main class="workspace">

@@ -5,6 +5,31 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config/admin_data.php';
 
 $admin = require_admin();
+
+if (empty($_SESSION['delete_submissions_token'])) {
+    $_SESSION['delete_submissions_token'] = bin2hex(random_bytes(32));
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_selected') {
+    $token = (string) ($_POST['csrf_token'] ?? '');
+    if (!hash_equals((string) $_SESSION['delete_submissions_token'], $token)) {
+        http_response_code(400);
+        exit('Invalid request token');
+    }
+
+    $selectedIds = $_POST['submission_ids'] ?? [];
+    if (!is_array($selectedIds) || !$selectedIds) {
+        header('Location: submissions.php?' . filter_query_string(['delete_error' => 'none']));
+        exit;
+    }
+
+    $deleted = delete_submissions_by_ids($selectedIds);
+    $_SESSION['delete_submissions_token'] = bin2hex(random_bytes(32));
+
+    header('Location: submissions.php?' . filter_query_string(['deleted' => $deleted]));
+    exit;
+}
+
 $filters = collect_submission_filters($_GET);
 $page = max(1, (int) ($_GET['page'] ?? 1));
 
@@ -58,6 +83,12 @@ require __DIR__ . '/_header.php';
   </form>
 </section>
 
+<?php if (isset($_GET['deleted'])): ?>
+  <div class="alert alert-success">ลบข้อมูลแล้ว <?= h((int) $_GET['deleted']) ?> รายการ</div>
+<?php elseif (($_GET['delete_error'] ?? '') === 'none'): ?>
+  <div class="alert">กรุณาเลือกรายการที่ต้องการลบก่อน</div>
+<?php endif; ?>
+
 <section class="panel">
   <div class="panel-header">
     <h2>รายการผลประเมิน <?= h($total) ?>  รายการ</h2>
@@ -79,10 +110,18 @@ require __DIR__ . '/_header.php';
       </select>
     </form>
 </div>
+  <form method="post" action="submissions.php?<?= h(filter_query_string()) ?>" class="bulk-delete-form" data-bulk-delete-form>
+    <input type="hidden" name="action" value="delete_selected">
+    <input type="hidden" name="csrf_token" value="<?= h($_SESSION['delete_submissions_token']) ?>">
+    <div class="bulk-actions">
+      <button class="btn-danger" type="submit">ลบข้อมูลที่เลือก</button>
+      <span>เลือกช่องติกหน้ารายการที่ต้องการลบได้หลายรายการ</span>
+    </div>
   <div class="table-wrap wide-table-wrap">
     <table class="answer-matrix-table">
       <thead>
         <tr>
+          <th class="select-cell"><input type="checkbox" data-select-all aria-label="เลือกรายการทั้งหมดในหน้านี้"></th>
           <th>วันที่</th>
           <th>รหัส</th>
           <th>คะแนนรวม</th>
@@ -97,6 +136,7 @@ require __DIR__ . '/_header.php';
         <?php foreach ($rows as $row): ?>
           <?php $rowAnswers = $answersBySubmission[(int) $row['id']] ?? []; ?>
           <tr>
+            <td class="select-cell"><input type="checkbox" name="submission_ids[]" value="<?= h($row['id']) ?>" aria-label="เลือก <?= h($row['submission_code']) ?>"></td>
             <td><?= h($row['created_at']) ?></td>
             <td><?= h($row['submission_code']) ?></td>
             <td><strong><?= h($row['total_score']) ?>/<?= h($row['max_score']) ?></strong></td>
@@ -113,6 +153,7 @@ require __DIR__ . '/_header.php';
       <div class="empty">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</div>
     <?php endif; ?>
   </div>
+  </form>
   <div class="pagination">
     <span>หน้า <?= h($page) ?> / <?= h($pages) ?></span>
     <div>
@@ -125,4 +166,42 @@ require __DIR__ . '/_header.php';
     </div>
   </div>          
 </section>
+<script>
+  (() => {
+    const form = document.querySelector('[data-bulk-delete-form]');
+    if (!form) return;
+
+    const selectAll = form.querySelector('[data-select-all]');
+    const rowChecks = [...form.querySelectorAll('input[name="submission_ids[]"]')];
+
+    const syncSelectAll = () => {
+      if (!selectAll) return;
+      const selectedCount = rowChecks.filter((checkbox) => checkbox.checked).length;
+      selectAll.checked = rowChecks.length > 0 && selectedCount === rowChecks.length;
+      selectAll.indeterminate = selectedCount > 0 && selectedCount < rowChecks.length;
+    };
+
+    selectAll?.addEventListener('change', () => {
+      rowChecks.forEach((checkbox) => {
+        checkbox.checked = selectAll.checked;
+      });
+      syncSelectAll();
+    });
+
+    rowChecks.forEach((checkbox) => checkbox.addEventListener('change', syncSelectAll));
+
+    form.addEventListener('submit', (event) => {
+      const selectedCount = rowChecks.filter((checkbox) => checkbox.checked).length;
+      if (selectedCount === 0) {
+        event.preventDefault();
+        alert('กรุณาเลือกรายการที่ต้องการลบก่อน');
+        return;
+      }
+
+      if (!confirm(`ยืนยันลบข้อมูล ${selectedCount} รายการ?`)) {
+        event.preventDefault();
+      }
+    });
+  })();
+</script>
 <?php require __DIR__ . '/_footer.php'; ?>
